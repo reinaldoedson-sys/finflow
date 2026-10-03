@@ -32,6 +32,16 @@ import {
   writeBatch,
   getDocs 
 } from 'firebase/firestore';
+import { generateId } from '../domain/id';
+import { toCents, fromCents, addMoney, subtractMoney } from '../domain/money';
+import { 
+  calculateAccountBalance, 
+  calculateCreditCardInvoice, 
+  calculateMonthlySummary,
+  calculateFutureCommitments,
+  MonthCommitment
+} from '../domain/calculations';
+import { calculateInstallmentSchedule } from '../domain/installments';
 
 interface FinanceContextType {
   transactions: Transaction[];
@@ -43,6 +53,7 @@ interface FinanceContextType {
   installmentPlans: InstallmentPlan[];
   currency: CurrencyCode;
   selectedMonth: string;
+  futureCommitments: MonthCommitment[];
   isCloudSynced: boolean;
   isDemoActive: boolean;
   clearSampleData: () => Promise<void>;
@@ -449,98 +460,30 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await seedInitialDataToCloud(currentUser.uid);
   };
 
-  // Recalculate account and credit card balances
+  // Recalculate account and credit card balances from the single source of truth (transactions)
   const computedAccounts = useMemo(() => {
-    return accounts.map(account => {
-      let balance = account.initialBalance;
-
-      transactions.forEach(tx => {
-        if (tx.status !== 'completed') return;
-
-        if (tx.paymentMethod === 'credit_card' && tx.creditCardId) {
-          return;
-        }
-
-        if (tx.type === 'income' && tx.accountId === account.id) {
-          balance += tx.amount;
-        } else if (tx.type === 'expense' && tx.accountId === account.id) {
-          balance -= tx.amount;
-        } else if (tx.type === 'transfer') {
-          if (tx.accountId === account.id) {
-            balance -= tx.amount;
-          }
-          if (tx.targetAccountId === account.id) {
-            balance += tx.amount;
-          }
-        }
-      });
-
-      return {
-        ...account,
-        currentBalance: balance
-      };
-    });
+    return accounts.map(account => ({
+      ...account,
+      currentBalance: calculateAccountBalance(account.initialBalance, account.id, transactions)
+    }));
   }, [accounts, transactions]);
 
   const computedCreditCards = useMemo(() => {
-    return creditCards.map(card => {
-      let invoice = 0;
-      transactions.forEach(tx => {
-        if (tx.creditCardId === card.id && tx.type === 'expense') {
-          invoice += tx.amount;
-        }
-      });
-      return {
-        ...card,
-        currentInvoice: invoice
-      };
-    });
+    return creditCards.map(card => ({
+      ...card,
+      currentInvoice: calculateCreditCardInvoice(card.id, transactions)
+    }));
   }, [creditCards, transactions]);
 
-  // Monthly summary
+  // Monthly summary calculated via pure domain function
   const summary = useMemo(() => {
-    const totalAccountsBalance = computedAccounts.reduce((acc, a) => acc + a.currentBalance, 0);
-    const totalCreditCardDebt = computedCreditCards.reduce((acc, c) => acc + c.currentInvoice, 0);
-    const totalNetWorth = totalAccountsBalance - totalCreditCardDebt;
-
-    let monthRealizedIncome = 0;
-    let monthExpectedIncome = 0;
-    let monthRealizedExpense = 0;
-    let monthExpectedExpense = 0;
-
-    transactions.forEach(tx => {
-      if (tx.date.startsWith(selectedMonth)) {
-        if (tx.type === 'income') {
-          monthExpectedIncome += tx.amount;
-          if (tx.status === 'completed') {
-            monthRealizedIncome += tx.amount;
-          }
-        } else if (tx.type === 'expense') {
-          monthExpectedExpense += tx.amount;
-          if (tx.status === 'completed') {
-            monthRealizedExpense += tx.amount;
-          }
-        }
-      }
-    });
-
-    const monthNetBalance = monthRealizedIncome - monthRealizedExpense;
-    const savingsRate = monthRealizedIncome > 0 
-      ? Math.max(0, Math.round((monthNetBalance / monthRealizedIncome) * 100))
-      : 0;
-
-    return {
-      totalNetWorth,
-      totalAccountsBalance,
-      totalCreditCardDebt,
-      monthRealizedIncome,
-      monthExpectedIncome,
-      monthRealizedExpense,
-      monthExpectedExpense,
-      monthNetBalance,
-      savingsRate
-    };
+    return calculateMonthlySummary(computedAccounts, computedCreditCards, transactions, selectedMonth);
   }, [computedAccounts, computedCreditCards, transactions, selectedMonth]);
+
+  // Comprometimentos futuros projetados para os próximos 6 meses
+  const futureCommitments = useMemo(() => {
+    return calculateFutureCommitments(transactions, 6, selectedMonth);
+  }, [transactions, selectedMonth]);
 
   const goToPreviousMonth = () => setSelectedMonth(prev => getPreviousMonth(prev));
   const goToNextMonth = () => setSelectedMonth(prev => getNextMonth(prev));
@@ -549,7 +492,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Transaction CRUD (Local + Firestore)
   const addTransaction = async (tx: Omit<Transaction, 'id' | 'createdAt'>) => {
-    const newId = 'tx-' + Date.now();
+    const newId = generateId('tx');
     const createdAt = new Date().toISOString();
     const newTx: Transaction = {
       ...tx,
@@ -623,7 +566,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Account CRUD
   const addAccount = async (acc: Omit<Account, 'id' | 'currentBalance'>) => {
-    const newId = 'acc-' + Date.now();
+    const newId = generateId('acc');
     const newAcc: Account = {
       ...acc,
       id: newId,
@@ -683,7 +626,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Credit Card CRUD
   const addCreditCard = async (card: Omit<CreditCard, 'id' | 'currentInvoice'>) => {
-    const newId = 'card-' + Date.now();
+    const newId = generateId('card');
     const newCard: CreditCard = {
       ...card,
       id: newId,
@@ -743,7 +686,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Category CRUD
   const addCategory = async (cat: Omit<Category, 'id'>) => {
-    const newId = 'cat-' + Date.now();
+    const newId = generateId('cat');
     const newCat: Category = { ...cat, id: newId };
     setCategories(prev => [...prev, newCat]);
 
@@ -792,7 +735,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   // Budget Actions
   const setBudget = async (categoryId: string, limitAmount: number) => {
     const existing = budgets.find(b => b.categoryId === categoryId && b.month === selectedMonth);
-    const budgetId = existing ? existing.id : 'b-' + Date.now();
+    const budgetId = existing ? existing.id : generateId('b');
 
     setBudgets(prev => {
       const existingIndex = prev.findIndex(b => b.categoryId === categoryId && b.month === selectedMonth);
@@ -834,7 +777,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Goal Actions
   const addGoal = async (goal: Omit<FinancialGoal, 'id' | 'currentAmount'>) => {
-    const newId = 'goal-' + Date.now();
+    const newId = generateId('goal');
     const newGoal: FinancialGoal = {
       ...goal,
       id: newId,
@@ -893,13 +836,13 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const addGoalDeposit = async (id: string, amount: number) => {
     const goal = goals.find(g => g.id === id);
     if (!goal) return;
-    const newAmount = Math.max(0, goal.currentAmount + amount);
+    const newAmount = Math.max(0, addMoney(goal.currentAmount, amount));
     await updateGoal(id, { currentAmount: newAmount });
   };
 
   // Installment Plans CRUD
   const addInstallmentPlan = async (plan: Omit<InstallmentPlan, 'id' | 'createdAt'>) => {
-    const planId = 'plan-' + Date.now();
+    const planId = generateId('plan');
     const createdAt = new Date().toISOString();
     const newPlan: InstallmentPlan = {
       ...plan,
@@ -907,37 +850,33 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       createdAt
     };
 
-    // Generate monthly installment dates
-    const [startYear, startMonth, startDay] = plan.startDate.split('-').map(Number);
+    // Gera o cronograma exato com distribuição correta de centavos e dias do mês
+    const schedule = calculateInstallmentSchedule(
+      plan.totalAmount,
+      plan.totalInstallments,
+      plan.startDate
+    );
     const newTransactions: Transaction[] = [];
     const todayStr = new Date().toISOString().split('T')[0];
 
-    for (let i = 0; i < plan.totalInstallments; i++) {
-      const txId = `tx-${planId}-${i + 1}`;
-      
-      const d = new Date(startYear, (startMonth - 1) + i, 1);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const maxDaysInMonth = new Date(year, d.getMonth() + 1, 0).getDate();
-      const day = String(Math.min(startDay, maxDaysInMonth)).padStart(2, '0');
-      const installmentDate = `${year}-${month}-${day}`;
-
-      const isPastOrToday = installmentDate <= todayStr;
+    for (const item of schedule) {
+      const txId = `tx-${planId}-${item.number}`;
+      const isPastOrToday = item.date <= todayStr;
 
       const tx: Transaction = {
         id: txId,
-        description: `${plan.description} (${i + 1}/${plan.totalInstallments})`,
-        amount: plan.installmentAmount,
+        description: `${plan.description} (${item.number}/${plan.totalInstallments})`,
+        amount: item.amount,
         type: plan.type,
         categoryId: plan.categoryId || 'cat-compras',
         accountId: plan.accountId,
         creditCardId: plan.creditCardId || '',
         paymentMethod: plan.paymentMethod,
-        date: installmentDate,
+        date: item.date,
         status: isPastOrToday ? 'completed' : 'pending',
         installmentPlanId: planId,
         installments: {
-          current: i + 1,
+          current: item.number,
           total: plan.totalInstallments,
           parentTransactionId: planId
         },
@@ -1192,6 +1131,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         installmentPlans,
         currency,
         selectedMonth,
+        futureCommitments,
         isCloudSynced,
         isDemoActive,
         clearSampleData,
