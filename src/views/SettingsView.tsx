@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSecurity } from '../context/SecurityContext';
 import { useFinance } from '../context/FinanceContext';
+import { useAuth } from '../context/AuthContext';
 import { CurrencyCode } from '../types/finance';
 import { 
   Shield, 
@@ -15,7 +16,11 @@ import {
   Plus, 
   Check, 
   AlertTriangle,
-  FolderLock
+  FolderLock,
+  Cloud,
+  LogIn,
+  LogOut,
+  CheckCircle2
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
 
@@ -41,8 +46,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
     addCategory, 
     deleteCategory, 
     resetToDefaults, 
-    clearAllData 
+    clearAllData,
+    clearSampleData,
+    isDemoActive,
+    syncLocalToCloud,
+    isCloudSynced
   } = useFinance();
+
+  const { currentUser, signInWithGoogle, logout, authError } = useAuth();
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   // Pin state form
   const [showPinSetup, setShowPinSetup] = useState(false);
@@ -58,6 +70,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
 
   // Confirmation modal for clear data
   const [confirmClear, setConfirmClear] = useState(false);
+
+  const handleSyncToCloud = async () => {
+    setSyncStatus('Sincronizando com Firestore...');
+    await syncLocalToCloud();
+    setSyncStatus('Dados sincronizados com sucesso no Firebase!');
+    setTimeout(() => setSyncStatus(null), 3500);
+  };
 
   const handleSavePin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,6 +129,106 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
         <p className="text-xs text-slate-400 mt-0.5">
           Gerencie a proteção por PIN, cofre criptografado local e preferências do sistema
         </p>
+      </div>
+
+      {/* Cloud Sync & Firebase Section */}
+      <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Cloud className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Sincronização em Nuvem (Firebase Firestore)</h3>
+              <p className="text-xs text-slate-400">Acesse seus dados em múltiplos dispositivos com segurança e backup em tempo real</p>
+            </div>
+          </div>
+          {currentUser && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Conectado
+            </span>
+          )}
+        </div>
+
+        {authError && (
+          <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            {authError}
+          </div>
+        )}
+
+        {syncStatus && (
+          <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{syncStatus}</span>
+          </div>
+        )}
+
+        {currentUser ? (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-800/40 border border-slate-800">
+              <div className="flex items-center gap-3">
+                {currentUser.photoURL ? (
+                  <img
+                    src={currentUser.photoURL}
+                    alt={currentUser.displayName || 'Avatar'}
+                    referrerPolicy="no-referrer"
+                    className="w-10 h-10 rounded-full object-cover border border-slate-700"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-sm">
+                    {(currentUser.email?.[0] || 'U').toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs font-bold text-white">{currentUser.displayName || 'Usuário Google'}</p>
+                  <p className="text-[11px] text-slate-400">{currentUser.email}</p>
+                  <p className="text-[10px] text-emerald-400/90 font-mono mt-0.5">UID: {currentUser.uid.slice(0, 12)}...</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSyncToCloud}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Sincronizar Agora</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="px-3 py-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Desconectar</span>
+                </button>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Seus lançamentos, contas e orçamentos estão sendo salvos com isolamento total no banco de dados Firestore sob sua identidade protegida.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-800/30 border border-slate-800">
+            <div>
+              <p className="text-xs font-semibold text-slate-200">Você está usando o Modo Local (Offline)</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Conecte sua conta Google para sincronizar suas finanças na nuvem e nunca perder nenhum lançamento.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={signInWithGoogle}
+              className="px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 shrink-0"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Conectar com Google</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Security & PIN Section */}
@@ -319,14 +438,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
           <div>
+            <p className="text-xs font-semibold text-amber-400">Limpar Dados de Exemplo</p>
+            <p className="text-[11px] text-slate-400">
+              Remove contas, cartões e transações de demonstração para que você comece com o FinFlow limpo. Os dados de teste não voltarão mais.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              await clearSampleData();
+              setSyncStatus('Dados de exemplo removidos com sucesso! Você agora está com o FinFlow limpo.');
+              setTimeout(() => setSyncStatus(null), 3500);
+            }}
+            className="px-3.5 py-1.5 text-xs font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-amber-400" />
+            <span>Limpar Dados de Teste</span>
+          </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
+          <div>
             <p className="text-xs font-semibold text-slate-200">Dados de Demonstração</p>
             <p className="text-[11px] text-slate-400">
               Restaurar dados de exemplo realistas (Nubank, Itaú, XP, despesas do mês)
             </p>
           </div>
           <button
-            onClick={resetToDefaults}
-            className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+            onClick={async () => {
+              await resetToDefaults();
+              setSyncStatus('Dados de demonstração recarregados.');
+              setTimeout(() => setSyncStatus(null), 3500);
+            }}
+            className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Recarregar Demo</span>

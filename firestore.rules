@@ -1,0 +1,172 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User profile document
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // Users cannot list other users
+      allow create: if isOwner(userId) 
+        && isValidId(userId)
+        && incoming().keys().hasAll(['email', 'currency', 'createdAt'])
+        && incoming().keys().hasOnly(['email', 'displayName', 'photoURL', 'currency', 'createdAt'])
+        && incoming().email is string && incoming().email.size() <= 256
+        && incoming().currency in ['BRL', 'USD', 'EUR']
+        && incoming().createdAt is string && incoming().createdAt.size() <= 64;
+      allow update: if isOwner(userId)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'currency'])
+        && (!('displayName' in incoming()) || (incoming().displayName is string && incoming().displayName.size() <= 128))
+        && (!('photoURL' in incoming()) || (incoming().photoURL is string && incoming().photoURL.size() <= 512))
+        && (!('currency' in incoming()) || incoming().currency in ['BRL', 'USD', 'EUR']);
+      allow delete: if isOwner(userId);
+
+      // Subcollection: Accounts
+      match /accounts/{accountId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(accountId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['name', 'bankName', 'type', 'color', 'initialBalance', 'userId'])
+          && incoming().keys().hasOnly(['name', 'bankName', 'type', 'color', 'initialBalance', 'currentBalance', 'icon', 'userId'])
+          && incoming().name is string && incoming().name.size() <= 80
+          && incoming().bankName is string && incoming().bankName.size() <= 80
+          && incoming().type in ['checking', 'savings', 'investment', 'cash']
+          && incoming().color is string && incoming().color.size() <= 16
+          && incoming().initialBalance is number;
+        allow update: if isOwner(userId)
+          && incoming().userId == userId
+          && incoming().keys().hasOnly(['name', 'bankName', 'type', 'color', 'initialBalance', 'currentBalance', 'icon', 'userId'])
+          && incoming().name is string && incoming().name.size() <= 80
+          && incoming().bankName is string && incoming().bankName.size() <= 80
+          && incoming().type in ['checking', 'savings', 'investment', 'cash']
+          && incoming().color is string && incoming().color.size() <= 16
+          && incoming().initialBalance is number;
+      }
+
+      // Subcollection: Credit Cards
+      match /creditCards/{cardId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(cardId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['name', 'bankName', 'color', 'limit', 'closingDay', 'dueDay', 'userId'])
+          && incoming().keys().hasOnly(['name', 'bankName', 'color', 'limit', 'closingDay', 'dueDay', 'currentInvoice', 'userId'])
+          && incoming().name is string && incoming().name.size() <= 80
+          && incoming().bankName is string && incoming().bankName.size() <= 80
+          && incoming().color is string && incoming().color.size() <= 16
+          && incoming().limit is number
+          && incoming().closingDay is number && incoming().closingDay >= 1 && incoming().closingDay <= 31
+          && incoming().dueDay is number && incoming().dueDay >= 1 && incoming().dueDay <= 31;
+      }
+
+      // Subcollection: Categories
+      match /categories/{categoryId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(categoryId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['name', 'icon', 'color', 'type', 'userId'])
+          && incoming().keys().hasOnly(['name', 'icon', 'color', 'type', 'userId'])
+          && incoming().name is string && incoming().name.size() <= 60
+          && incoming().icon is string && incoming().icon.size() <= 32
+          && incoming().color is string && incoming().color.size() <= 16
+          && incoming().type in ['expense', 'income', 'both'];
+      }
+
+      // Subcollection: Budgets
+      match /budgets/{budgetId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(budgetId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['categoryId', 'month', 'limitAmount', 'userId'])
+          && incoming().keys().hasOnly(['categoryId', 'month', 'limitAmount', 'userId'])
+          && incoming().categoryId is string && incoming().categoryId.size() <= 64
+          && incoming().month is string && incoming().month.size() <= 7
+          && incoming().limitAmount is number;
+      }
+
+      // Subcollection: Goals
+      match /goals/{goalId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(goalId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['name', 'targetAmount', 'currentAmount', 'targetDate', 'color', 'userId'])
+          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'targetDate', 'color', 'icon', 'notes', 'userId'])
+          && incoming().name is string && incoming().name.size() <= 80
+          && incoming().targetAmount is number
+          && incoming().currentAmount is number
+          && incoming().targetDate is string && incoming().targetDate.size() <= 10
+          && incoming().color is string && incoming().color.size() <= 16;
+      }
+
+      // Subcollection: Installment Plans
+      match /installmentPlans/{planId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(planId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['description', 'totalAmount', 'installmentAmount', 'totalInstallments', 'type', 'accountId', 'paymentMethod', 'startDate', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['description', 'totalAmount', 'installmentAmount', 'totalInstallments', 'type', 'categoryId', 'accountId', 'creditCardId', 'paymentMethod', 'startDate', 'userId', 'createdAt'])
+          && incoming().description is string && incoming().description.size() <= 120
+          && incoming().totalAmount is number
+          && incoming().installmentAmount is number
+          && incoming().totalInstallments is number && incoming().totalInstallments >= 2 && incoming().totalInstallments <= 120
+          && incoming().type in ['expense', 'income']
+          && incoming().startDate is string && incoming().startDate.size() <= 10;
+      }
+
+      // Subcollection: Transactions
+      match /transactions/{transactionId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(transactionId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['description', 'amount', 'type', 'accountId', 'paymentMethod', 'date', 'status', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['description', 'amount', 'type', 'categoryId', 'accountId', 'targetAccountId', 'creditCardId', 'paymentMethod', 'date', 'status', 'notes', 'isRecurring', 'installmentPlanId', 'installments', 'userId', 'createdAt'])
+          && incoming().description is string && incoming().description.size() <= 120
+          && incoming().amount is number
+          && incoming().type in ['expense', 'income', 'transfer']
+          && incoming().accountId is string && incoming().accountId.size() <= 64
+          && incoming().paymentMethod in ['pix', 'credit_card', 'debit_card', 'bank_slip', 'cash', 'transfer']
+          && incoming().date is string && incoming().date.size() <= 10
+          && incoming().status in ['completed', 'pending']
+          && incoming().createdAt is string && incoming().createdAt.size() <= 64;
+        allow update: if isOwner(userId)
+          && incoming().userId == userId
+          && incoming().description is string && incoming().description.size() <= 120
+          && incoming().amount is number
+          && incoming().type in ['expense', 'income', 'transfer']
+          && incoming().accountId is string && incoming().accountId.size() <= 64
+          && incoming().status in ['completed', 'pending'];
+      }
+    }
+  }
+}

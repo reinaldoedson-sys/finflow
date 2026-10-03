@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { Transaction, TransactionType } from '../types/finance';
-import { formatCurrency, formatDateShort } from '../utils/currency';
+import { formatCurrency, formatDateShort, getMonthLabel } from '../utils/currency';
 import { 
   Search, 
   Filter, 
@@ -16,7 +16,10 @@ import {
   ArrowLeftRight,
   CheckCircle,
   Clock,
-  Check
+  Check,
+  Calendar,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
 
@@ -37,7 +40,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     currency, 
     deleteTransaction, 
     toggleTransactionStatus,
-    addTransaction
+    addTransaction,
+    selectedMonth
   } = useFinance();
   const { hideValues } = useSecurity();
 
@@ -46,6 +50,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>('all');
+  const [installmentFilter, setInstallmentFilter] = useState<'current_month' | 'all' | 'none'>('current_month');
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -74,9 +79,27 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       // Status filter
       if (statusFilter !== 'all' && t.status !== statusFilter) return false;
 
+      // Installment filter: default is 'current_month' so future/past installments don't clutter the transactions view
+      const isInstallment = !!(t.installmentPlanId || t.installments || /\(\d+\/\d+\)/.test(t.description));
+      if (isInstallment) {
+        if (installmentFilter === 'current_month') {
+          if (!t.date.startsWith(selectedMonth)) return false;
+        } else if (installmentFilter === 'none') {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [transactions, search, typeFilter, categoryFilter, accountFilter, statusFilter]);
+  }, [transactions, search, typeFilter, categoryFilter, accountFilter, statusFilter, installmentFilter, selectedMonth]);
+
+  // Count installments hidden because they belong to other months
+  const hiddenFutureInstallmentsCount = useMemo(() => {
+    return transactions.filter(t => {
+      const isInstallment = !!(t.installmentPlanId || t.installments || /\(\d+\/\d+\)/.test(t.description));
+      return isInstallment && !t.date.startsWith(selectedMonth);
+    }).length;
+  }, [transactions, selectedMonth]);
 
   // Aggregate stats for filtered data
   const stats = useMemo(() => {
@@ -232,6 +255,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <option value="completed">Concluídos / Pagos</option>
             <option value="pending">Pendentes / Agendados</option>
           </select>
+
+          {/* Installment Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-md px-2 py-0.5">
+            <Layers className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <select
+              value={installmentFilter}
+              onChange={(e) => setInstallmentFilter(e.target.value as any)}
+              className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer"
+            >
+              <option value="current_month">Parcelas: Mês vigente (limpo)</option>
+              <option value="all">Parcelas: Todas as parcelas</option>
+              <option value="none">Ocultar parcelamentos</option>
+            </select>
+          </div>
         </div>
 
         {/* Filter Summary Stats */}
@@ -257,6 +294,28 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       </div>
 
+      {/* Clean View Notification Banner */}
+      {installmentFilter === 'current_month' && hiddenFutureInstallmentsCount > 0 && (
+        <div className="flex items-center justify-between p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+            <span>
+              <strong>Visualização Limpa:</strong> Mostrando apenas as parcelas do mês vigente ({getMonthLabel(selectedMonth)}).
+              <span className="text-slate-400 ml-1">
+                ({hiddenFutureInstallmentsCount} parcela{hiddenFutureInstallmentsCount > 1 ? 's' : ''} de outros meses ocultada{hiddenFutureInstallmentsCount > 1 ? 's' : ''} para manter a listagem limpa).
+              </span>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setInstallmentFilter('all')}
+            className="text-[11px] font-semibold text-purple-400 hover:text-purple-300 underline underline-offset-2 shrink-0 ml-2"
+          >
+            Exibir todas as parcelas
+          </button>
+        </div>
+      )}
+
       {/* Transactions Table */}
       <div className="rounded-xl bg-slate-900/50 border border-slate-800/80 overflow-hidden shadow-sm">
         {filteredTransactions.length === 0 ? (
@@ -269,6 +328,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 setCategoryFilter('all');
                 setAccountFilter('all');
                 setStatusFilter('all');
+                setInstallmentFilter('current_month');
               }}
               className="text-emerald-400 underline font-medium ml-1"
             >
@@ -297,6 +357,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   const targetAcc = accounts.find(a => a.id === tx.targetAccountId);
                   const isIncome = tx.type === 'income';
                   const isTransfer = tx.type === 'transfer';
+                  const isInstallmentTx = !!(tx.installmentPlanId || tx.installments || /\(\d+\/\d+\)/.test(tx.description));
 
                   return (
                     <tr
@@ -324,10 +385,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                         {formatDateShort(tx.date)}
                       </td>
 
-                      {/* Description + Tags */}
+                      {/* Description + Tags + Installment badge */}
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-200 group-hover:text-emerald-300 transition-colors">
-                          {tx.description}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-200 group-hover:text-emerald-300 transition-colors">
+                            {tx.description}
+                          </span>
+                          {isInstallmentTx && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold font-mono bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                              <Layers className="w-3 h-3 text-purple-400" />
+                              {tx.installments
+                                ? `Parcela ${tx.installments.current}/${tx.installments.total}`
+                                : 'Parcelado'}
+                            </span>
+                          )}
                         </div>
                         {tx.tags && tx.tags.length > 0 && (
                           <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">

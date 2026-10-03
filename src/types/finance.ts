@@ -52,6 +52,23 @@ export interface Transaction {
     total: number;
     parentTransactionId?: string;
   };
+  installmentPlanId?: string;
+  createdAt: string;
+}
+
+export interface InstallmentPlan {
+  id: string;
+  description: string;
+  totalAmount: number;
+  installmentAmount: number;
+  totalInstallments: number;
+  type: 'expense' | 'income';
+  categoryId: string;
+  accountId: string;
+  creditCardId?: string;
+  paymentMethod: PaymentMethod;
+  startDate: string; // YYYY-MM-DD
+  userId?: string;
   createdAt: string;
 }
 

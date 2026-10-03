@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AuthProvider } from './context/AuthContext';
 import { SecurityProvider } from './context/SecurityContext';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { Header } from './components/Header';
@@ -9,12 +10,14 @@ import { GoalModal } from './components/GoalModal';
 import { GoalDepositModal } from './components/GoalDepositModal';
 import { BudgetModal } from './components/BudgetModal';
 import { BackupModal } from './components/BackupModal';
+import { InstallmentModal } from './components/InstallmentModal';
 
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
 import { AccountsView } from './views/AccountsView';
 import { BudgetsView } from './views/BudgetsView';
 import { GoalsView } from './views/GoalsView';
+import { InstallmentsView } from './views/InstallmentsView';
 import { ReportsView } from './views/ReportsView';
 import { SettingsView } from './views/SettingsView';
 
@@ -40,6 +43,8 @@ const FinFlowApp: React.FC = () => {
 
   const [isGoalDepositModalOpen, setIsGoalDepositModalOpen] = useState(false);
   const [selectedGoalForDeposit, setSelectedGoalForDeposit] = useState<FinancialGoal | null>(null);
+
+  const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
 
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [budgetCatId, setBudgetCatId] = useState<string | undefined>(undefined);
@@ -167,6 +172,12 @@ const FinFlowApp: React.FC = () => {
           />
         )}
 
+        {currentTab === 'installments' && (
+          <InstallmentsView
+            onOpenNewInstallment={() => setIsInstallmentModalOpen(true)}
+          />
+        )}
+
         {currentTab === 'budgets' && (
           <BudgetsView
             onOpenBudgetModal={handleOpenBudgetModal}
@@ -246,6 +257,11 @@ const FinFlowApp: React.FC = () => {
         initialAmount={budgetInitialAmount}
       />
 
+      <InstallmentModal
+        isOpen={isInstallmentModalOpen}
+        onClose={() => setIsInstallmentModalOpen(false)}
+      />
+
       <BackupModal
         isOpen={isBackupModalOpen}
         onClose={() => setIsBackupModalOpen(false)}
@@ -256,10 +272,12 @@ const FinFlowApp: React.FC = () => {
 
 export default function App() {
   return (
-    <SecurityProvider>
-      <FinanceProvider>
-        <FinFlowApp />
-      </FinanceProvider>
-    </SecurityProvider>
+    <AuthProvider>
+      <SecurityProvider>
+        <FinanceProvider>
+          <FinFlowApp />
+        </FinanceProvider>
+      </SecurityProvider>
+    </AuthProvider>
   );
 }

@@ -15,7 +15,8 @@ import {
   Plus,
   ArrowRight,
   ShieldCheck,
-  Target
+  Target,
+  Sparkles
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { Transaction } from '../types/finance';
@@ -45,9 +46,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     categories, 
     budgets, 
     goals, 
+    installmentPlans,
     currency, 
     selectedMonth,
-    toggleTransactionStatus 
+    toggleTransactionStatus,
+    isDemoActive,
+    clearSampleData 
   } = useFinance();
   const { hideValues } = useSecurity();
 
@@ -80,6 +84,53 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Demo Data Notice Banner */}
+      {isDemoActive && (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-slate-900/90 to-slate-900 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-white">Você está visualizando dados de demonstração (Nubank, Itaú, XP)</p>
+              <p className="text-[11px] text-slate-400">Deseja gerenciar suas finanças reais? Limpe os dados de exemplo em 1 clique para começar do zero.</p>
+            </div>
+          </div>
+          <button
+            onClick={clearSampleData}
+            className="px-3.5 py-2 text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-all self-start sm:self-auto shadow-sm whitespace-nowrap active:scale-95"
+          >
+            Limpar Dados de Exemplo (Começar do Zero)
+          </button>
+        </div>
+      )}
+
+      {/* Installment Plans Quick Access */}
+      {installmentPlans.length > 0 && (
+        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+              <CardIcon className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white">Compras Parceladas em Andamento</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold">
+                  {installmentPlans.length} {installmentPlans.length === 1 ? 'parcelamento' : 'parcelamentos'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">Acompanhe parcelas futuras, saldo restante e impacto nas faturas.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigateToTab('installments')}
+            className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all self-start sm:self-auto"
+          >
+            <span>Ver Aba de Parcelamentos</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       {/* 4 Top KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Patrimônio Líquido */}

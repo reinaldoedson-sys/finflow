@@ -1,4 +1,4 @@
-import { Category, Account, CreditCard, Transaction, FinancialGoal, Budget } from '../types/finance';
+import { Category, Account, CreditCard, Transaction, FinancialGoal, Budget, InstallmentPlan } from '../types/finance';
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat-salario', name: 'Salário & Renda', icon: 'Briefcase', color: '#10b981', type: 'income' },
@@ -266,3 +266,35 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     createdAt: '2026-10-03T21:45:00Z'
   }
 ];
+
+export const INITIAL_INSTALLMENT_PLANS: InstallmentPlan[] = [
+  {
+    id: 'plan-1',
+    description: 'Smartphone Galaxy S24 Ultra',
+    totalAmount: 6499.00,
+    installmentAmount: 649.90,
+    totalInstallments: 10,
+    type: 'expense',
+    categoryId: 'cat-compras',
+    accountId: 'acc-nubank',
+    creditCardId: 'card-nubank',
+    paymentMethod: 'credit_card',
+    startDate: '2026-08-10',
+    createdAt: '2026-08-10T12:00:00Z'
+  },
+  {
+    id: 'plan-2',
+    description: 'Seguro Auto Anual Porto Seguro',
+    totalAmount: 2850.00,
+    installmentAmount: 475.00,
+    totalInstallments: 6,
+    type: 'expense',
+    categoryId: 'cat-transporte',
+    accountId: 'acc-itau',
+    creditCardId: 'card-itau',
+    paymentMethod: 'credit_card',
+    startDate: '2026-09-15',
+    createdAt: '2026-09-15T10:00:00Z'
+  }
+];
+

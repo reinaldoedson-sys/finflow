@@ -1,0 +1,167 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile document storing basic account preferences.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 256, "description": "User email address" },
+        "displayName": { "type": "string", "maxLength": 128, "description": "User display name" },
+        "photoURL": { "type": "string", "maxLength": 512, "description": "Avatar image URL" },
+        "currency": { "type": "string", "enum": ["BRL", "USD", "EUR"], "description": "Default currency code" },
+        "createdAt": { "type": "string", "description": "Account creation timestamp" }
+      },
+      "required": ["email", "currency", "createdAt"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Financial bank account or cash wallet.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 80, "description": "Account name" },
+        "bankName": { "type": "string", "maxLength": 80, "description": "Bank or institution name" },
+        "type": { "type": "string", "enum": ["checking", "savings", "investment", "cash"], "description": "Account type" },
+        "color": { "type": "string", "maxLength": 16, "description": "Hex color code" },
+        "initialBalance": { "type": "number", "description": "Initial balance value" },
+        "currentBalance": { "type": "number", "description": "Calculated current balance" },
+        "icon": { "type": "string", "maxLength": 32, "description": "Icon identifier" },
+        "userId": { "type": "string", "maxLength": 128, "description": "Owner user UID" }
+      },
+      "required": ["name", "bankName", "type", "color", "initialBalance", "userId"]
+    },
+    "CreditCard": {
+      "title": "CreditCard",
+      "description": "Credit card with limit, closing day, and due day.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 80, "description": "Credit card name" },
+        "bankName": { "type": "string", "maxLength": 80, "description": "Issuing bank name" },
+        "color": { "type": "string", "maxLength": 16, "description": "Hex color code" },
+        "limit": { "type": "number", "description": "Credit card limit" },
+        "closingDay": { "type": "number", "description": "Day of month the invoice closes" },
+        "dueDay": { "type": "number", "description": "Day of month the invoice is due" },
+        "currentInvoice": { "type": "number", "description": "Current invoice total" },
+        "userId": { "type": "string", "maxLength": 128, "description": "Owner user UID" }
+      },
+      "required": ["name", "bankName", "color", "limit", "closingDay", "dueDay", "userId"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Expense or income category.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 60, "description": "Category name" },
+        "icon": { "type": "string", "maxLength": 32, "description": "Icon identifier" },
+        "color": { "type": "string", "maxLength": 16, "description": "Hex color code" },
+        "type": { "type": "string", "enum": ["expense", "income", "both"], "description": "Category flow type" },
+        "userId": { "type": "string", "maxLength": 128, "description": "Owner user UID" }
+      },
+      "required": ["name", "icon", "color", "type", "userId"]
+    },
+    "Budget": {
+      "title": "Budget",
+      "description": "Monthly spending budget limit for a category.",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string", "maxLength": 64, "description": "Category ID" },
+        "month": { "type": "string", "maxLength": 7, "description": "Target month in YYYY-MM format" },
+        "limitAmount": { "type": "number", "description": "Target spending limit" },
+        "userId": { "type": "string", "maxLength": 128, "description": "Owner user UID" }
+      },
+      "required": ["categoryId", "month", "limitAmount", "userId"]
+    },
+    "FinancialGoal": {
+      "title": "FinancialGoal",
+      "description": "Financial savings goal or reserve.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 80, "description": "Goal title" },
+        "targetAmount": { "type": "number", "description": "Target amount to reach" },
+        "currentAmount": { "type": "number", "description": "Currently accumulated amount" },
+        "targetDate": { "type": "string", "maxLength": 10, "description": "Target completion date YYYY-MM-DD" },
+        "color": { "type": "string", "maxLength": 16, "description": "Hex color code" },
+        "icon": { "type": "string", "maxLength": 32, "description": "Icon identifier" },
+        "notes": { "type": "string", "maxLength": 280, "description": "Optional notes or plan" },
+        "userId": { "type": "string", "maxLength": 128, "description": "Owner user UID" }
+      },
+      "required": ["name", "targetAmount", "currentAmount", "targetDate", "color", "userId"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial ledger entry (expense, income, or account transfer).",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string", "maxLength": 120, "description": "Transaction description" },
+        "amount": { "type": "number", "description": "Transaction value" },
+        "type": { "type": "string", "enum": ["expense", "income", "transfer"], "description": "Transaction flow type" },
+        "categoryId": { "type": "string", "maxLength": 64, "description": "Associated category ID" },
+        "accountId": { "type": "string", "maxLength": 64, "description": "Source bank account ID" },
+        "targetAccountId": { "type": "string", "maxLength": 64, "description": "Destination account if transfer" },
+        "creditCardId": { "type": "string", "maxLength": 64, "description": "Credit card ID if paid by card" },
+        "paymentMethod": { "type": "string", "enum": ["pix", "credit_card", "debit_card", "bank_slip", "cash", "transfer"], "description": "Payment method" },
+        "date": { "type": "string", "maxLength": 10, "description": "Date YYYY-MM-DD" },
+        "status": { "type": "string", "enum": ["completed", "pending"], "description": "Completion state" },
+        "notes": { "type": "string", "maxLength": 280, "description": "Optional memo notes" },
+        "isRecurring": { "type": "boolean", "description": "Whether transaction is monthly recurring" },
+        "installmentPlanId": { "type": "string", "maxLength": 64, "description": "Linked installment plan ID" },
+        "userId": { "type": "string", "maxLength": 128, "description": "Owner user UID" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["description", "amount", "type", "accountId", "paymentMethod", "date", "status", "userId", "createdAt"]
+    },
+    "InstallmentPlan": {
+      "title": "InstallmentPlan",
+      "description": "Multi-month installment purchase or receivable plan.",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string", "maxLength": 120, "description": "Plan description" },
+        "totalAmount": { "type": "number", "description": "Total purchase or sale amount" },
+        "installmentAmount": { "type": "number", "description": "Value of each installment" },
+        "totalInstallments": { "type": "number", "description": "Total number of installments" },
+        "type": { "type": "string", "enum": ["expense", "income"], "description": "Installment flow type" },
+        "categoryId": { "type": "string", "maxLength": 64, "description": "Associated category ID" },
+        "accountId": { "type": "string", "maxLength": 64, "description": "Source account ID" },
+        "creditCardId": { "type": "string", "maxLength": 64, "description": "Credit card ID if applicable" },
+        "paymentMethod": { "type": "string", "enum": ["pix", "credit_card", "debit_card", "bank_slip", "cash", "transfer"], "description": "Payment method" },
+        "startDate": { "type": "string", "maxLength": 10, "description": "First installment date YYYY-MM-DD" },
+        "userId": { "type": "string", "maxLength": 128, "description": "Owner user UID" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["description", "totalAmount", "installmentAmount", "totalInstallments", "type", "accountId", "paymentMethod", "startDate", "userId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile with personal preferences"
+    },
+    "/users/{userId}/accounts/{accountId}": {
+      "schema": "Account",
+      "description": "User bank and financial accounts"
+    },
+    "/users/{userId}/creditCards/{cardId}": {
+      "schema": "CreditCard",
+      "description": "User credit cards"
+    },
+    "/users/{userId}/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "User custom and default categories"
+    },
+    "/users/{userId}/budgets/{budgetId}": {
+      "schema": "Budget",
+      "description": "User monthly category budgets"
+    },
+    "/users/{userId}/goals/{goalId}": {
+      "schema": "FinancialGoal",
+      "description": "User savings goals and cofrinhos"
+    },
+    "/users/{userId}/installmentPlans/{planId}": {
+      "schema": "InstallmentPlan",
+      "description": "User installment plans and purchases"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "User financial transactions and ledger"
+    }
+  }
+}
