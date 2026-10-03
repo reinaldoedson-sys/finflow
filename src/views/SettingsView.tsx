@@ -50,11 +50,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
     clearSampleData,
     isDemoActive,
     syncLocalToCloud,
-    isCloudSynced
+    isCloudSynced,
+    syncStatus: globalSyncStatus,
+    syncError,
+    pendingSyncCount,
+    retrySync
   } = useFinance();
 
   const { currentUser, signInWithGoogle, logout, authError } = useAuth();
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   // Pin state form
   const [showPinSetup, setShowPinSetup] = useState(false);
@@ -72,10 +76,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
   const [confirmClear, setConfirmClear] = useState(false);
 
   const handleSyncToCloud = async () => {
-    setSyncStatus('Sincronizando com Firestore...');
-    await syncLocalToCloud();
-    setSyncStatus('Dados sincronizados com sucesso no Firebase!');
-    setTimeout(() => setSyncStatus(null), 3500);
+    setSyncFeedback('Sincronizando com Firestore...');
+    try {
+      await retrySync();
+      await syncLocalToCloud();
+      setSyncFeedback('Dados sincronizados com sucesso no Firebase!');
+    } catch {
+      setSyncFeedback('Falha na sincronização. Os dados permanecem salvos localmente.');
+    }
+    setTimeout(() => setSyncFeedback(null), 3500);
   };
 
   const handleSavePin = async (e: React.FormEvent) => {
@@ -157,10 +166,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           </div>
         )}
 
-        {syncStatus && (
+        {syncFeedback && (
           <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>{syncStatus}</span>
+            <span>{syncFeedback}</span>
+          </div>
+        )}
+
+        {globalSyncStatus === 'error' && syncError && (
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-2">
+            <span>{syncError} ({pendingSyncCount} pendentes)</span>
+            <button
+              onClick={() => retrySync()}
+              className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 rounded text-[11px] font-medium transition-colors shrink-0"
+            >
+              Reenviar agora
+            </button>
           </div>
         )}
 
@@ -446,8 +467,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           <button
             onClick={async () => {
               await clearSampleData();
-              setSyncStatus('Dados de exemplo removidos com sucesso! Você agora está com o FinFlow limpo.');
-              setTimeout(() => setSyncStatus(null), 3500);
+              setSyncFeedback('Dados de exemplo removidos com sucesso! Você agora está com o FinFlow limpo.');
+              setTimeout(() => setSyncFeedback(null), 3500);
             }}
             className="px-3.5 py-1.5 text-xs font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
@@ -466,8 +487,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           <button
             onClick={async () => {
               await resetToDefaults();
-              setSyncStatus('Dados de demonstração recarregados.');
-              setTimeout(() => setSyncStatus(null), 3500);
+              setSyncFeedback('Dados de demonstração recarregados.');
+              setTimeout(() => setSyncFeedback(null), 3500);
             }}
             className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"
           >

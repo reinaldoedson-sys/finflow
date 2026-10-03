@@ -42,6 +42,17 @@ import {
   MonthCommitment
 } from '../domain/calculations';
 import { calculateInstallmentSchedule } from '../domain/installments';
+import {
+  SyncStatus,
+  PendingSyncOperation,
+  SyncCollection,
+  SyncOperationType,
+  enqueueOperation,
+  dequeueOperation,
+  mergeCloudWithPending,
+  loadPendingQueueFromStorage,
+  savePendingQueueToStorage
+} from '../domain/sync';
 
 interface FinanceContextType {
   transactions: Transaction[];
@@ -55,6 +66,10 @@ interface FinanceContextType {
   selectedMonth: string;
   futureCommitments: MonthCommitment[];
   isCloudSynced: boolean;
+  syncStatus: SyncStatus;
+  syncError: string | null;
+  pendingSyncCount: number;
+  retrySync: () => Promise<boolean>;
   isDemoActive: boolean;
   clearSampleData: () => Promise<void>;
   syncLocalToCloud: () => Promise<void>;
@@ -196,7 +211,23 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
   }, []);
 
-  const isCloudSynced = !!currentUser;
+  // Fila de operações pendentes e estado de sincronização
+  const [pendingQueue, setPendingQueue] = useState<PendingSyncOperation[]>(() =>
+    loadPendingQueueFromStorage()
+  );
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() => {
+    const queue = loadPendingQueueFromStorage();
+    return queue.length > 0 ? 'pending' : 'synced';
+  });
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const pendingQueueRef = React.useRef(pendingQueue);
+  useEffect(() => {
+    pendingQueueRef.current = pendingQueue;
+    savePendingQueueToStorage(pendingQueue);
+  }, [pendingQueue]);
+
+  const isCloudSynced = !!currentUser && syncStatus === 'synced' && pendingQueue.length === 0;
 
   // Local storage backups for offline support
   useEffect(() => {
@@ -238,81 +269,91 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const uid = currentUser.uid;
 
     // Listen to Accounts
-    const accPath = `users/${uid}/accounts`;
     const unsubAccounts = onSnapshot(
       collection(db, 'users', uid, 'accounts'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Account));
-        setAccounts(list);
+        setAccounts(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'accounts', prev));
       },
-      (error) => handleFirestoreError(error, OperationType.LIST, accPath)
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar contas no Firestore:', error);
+      }
     );
 
     // Listen to Credit Cards
-    const cardPath = `users/${uid}/creditCards`;
     const unsubCards = onSnapshot(
       collection(db, 'users', uid, 'creditCards'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CreditCard));
-        setCreditCards(list);
+        setCreditCards(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'creditCards', prev));
       },
-      (error) => handleFirestoreError(error, OperationType.LIST, cardPath)
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar cartões no Firestore:', error);
+      }
     );
 
     // Listen to Categories
-    const catPath = `users/${uid}/categories`;
     const unsubCats = onSnapshot(
       collection(db, 'users', uid, 'categories'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
-        setCategories(list.length > 0 ? list : DEFAULT_CATEGORIES);
+        const effective = list.length > 0 ? list : DEFAULT_CATEGORIES;
+        setCategories(prev => mergeCloudWithPending(effective, pendingQueueRef.current, 'categories', prev));
       },
-      (error) => handleFirestoreError(error, OperationType.LIST, catPath)
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar categorias no Firestore:', error);
+      }
     );
 
     // Listen to Budgets
-    const budgetPath = `users/${uid}/budgets`;
     const unsubBudgets = onSnapshot(
       collection(db, 'users', uid, 'budgets'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Budget));
-        setBudgets(list);
+        setBudgets(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'budgets', prev));
       },
-      (error) => handleFirestoreError(error, OperationType.LIST, budgetPath)
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar orçamentos no Firestore:', error);
+      }
     );
 
     // Listen to Goals
-    const goalPath = `users/${uid}/goals`;
     const unsubGoals = onSnapshot(
       collection(db, 'users', uid, 'goals'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FinancialGoal));
-        setGoals(list);
+        setGoals(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'goals', prev));
       },
-      (error) => handleFirestoreError(error, OperationType.LIST, goalPath)
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar metas no Firestore:', error);
+      }
     );
 
     // Listen to Installment Plans
-    const plansPath = `users/${uid}/installmentPlans`;
     const unsubPlans = onSnapshot(
       collection(db, 'users', uid, 'installmentPlans'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InstallmentPlan));
-        setInstallmentPlans(list);
+        setInstallmentPlans(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'installmentPlans', prev));
       },
-      (error) => handleFirestoreError(error, OperationType.LIST, plansPath)
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar parcelamentos no Firestore:', error);
+      }
     );
 
     // Listen to Transactions
-    const txPath = `users/${uid}/transactions`;
     const unsubTransactions = onSnapshot(
       collection(db, 'users', uid, 'transactions'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-        list.sort((a, b) => b.date.localeCompare(a.date));
-        setTransactions(list);
+        setTransactions(prev => {
+          const merged = mergeCloudWithPending(list, pendingQueueRef.current, 'transactions', prev);
+          return merged.sort((a, b) => b.date.localeCompare(a.date));
+        });
       },
-      (error) => handleFirestoreError(error, OperationType.LIST, txPath)
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar transações no Firestore:', error);
+      }
     );
 
     return () => {
@@ -455,8 +496,111 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
+  /**
+   * Executa a sincronização de uma operação com o Firestore de forma segura e resiliente.
+   * Se a gravação falhar, a operação é salva na fila de pendências para retry futuro,
+   * garantindo que o FinFlow nunca silencie um erro nem perca a alteração local.
+   */
+  const executeSync = async (
+    collectionName: SyncCollection,
+    docId: string,
+    type: SyncOperationType,
+    payload?: any
+  ): Promise<boolean> => {
+    if (!currentUser) return true;
+
+    try {
+      const docRef = doc(db, 'users', currentUser.uid, collectionName, docId);
+      if (type === 'set') {
+        await setDoc(docRef, payload);
+      } else if (type === 'update') {
+        await setDoc(docRef, payload, { merge: true });
+      } else if (type === 'delete') {
+        await deleteDoc(docRef);
+      }
+
+      setPendingQueue(prev => {
+        const next = dequeueOperation(prev, collectionName, docId);
+        if (next.length === 0) {
+          setSyncStatus('synced');
+          setSyncError(null);
+        }
+        return next;
+      });
+      return true;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[FinFlow Sync] Falha ao sincronizar ${collectionName}/${docId} (${type}):`, errMsg);
+
+      setPendingQueue(prev => enqueueOperation(prev, {
+        collection: collectionName,
+        docId,
+        type,
+        payload,
+        lastError: errMsg
+      }));
+      setSyncStatus('error');
+      setSyncError('Falha temporária ao sincronizar com a nuvem. Sua alteração está segura localmente.');
+      return false;
+    }
+  };
+
+  /**
+   * Reprocessa todas as operações pendentes na fila de sincronização.
+   * Evita duplicação porque utiliza IDs fixos e operações idempotentes (setDoc / deleteDoc).
+   */
+  const retrySync = async (): Promise<boolean> => {
+    if (!currentUser) return false;
+    const currentQueue = pendingQueueRef.current;
+    if (currentQueue.length === 0) {
+      setSyncStatus('synced');
+      setSyncError(null);
+      return true;
+    }
+
+    setSyncStatus('pending');
+    let remaining = [...currentQueue];
+    let allSucceeded = true;
+
+    for (const op of currentQueue) {
+      try {
+        const docRef = doc(db, 'users', currentUser.uid, op.collection, op.docId);
+        if (op.type === 'set') {
+          await setDoc(docRef, op.payload);
+        } else if (op.type === 'update') {
+          await setDoc(docRef, op.payload, { merge: true });
+        } else if (op.type === 'delete') {
+          await deleteDoc(docRef);
+        }
+        remaining = dequeueOperation(remaining, op.collection, op.docId);
+      } catch (err) {
+        allSucceeded = false;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        remaining = enqueueOperation(remaining, {
+          collection: op.collection,
+          docId: op.docId,
+          type: op.type,
+          payload: op.payload,
+          lastError: errMsg
+        });
+      }
+    }
+
+    setPendingQueue(remaining);
+    if (allSucceeded && remaining.length === 0) {
+      setSyncStatus('synced');
+      setSyncError(null);
+      return true;
+    } else {
+      setSyncStatus('error');
+      setSyncError(`Ainda restam ${remaining.length} operações pendentes de sincronização.`);
+      return false;
+    }
+  };
+
   const syncLocalToCloud = async () => {
     if (!currentUser) return;
+    await retrySync();
     await seedInitialDataToCloud(currentUser.uid);
   };
 
@@ -509,27 +653,22 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions(prev => [newTx, ...prev]);
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/transactions/${newId}`;
-      try {
-        await setDoc(doc(db, 'users', currentUser.uid, 'transactions', newId), {
-          description: tx.description,
-          amount: tx.amount,
-          type: tx.type,
-          categoryId: tx.categoryId || 'cat-outros',
-          accountId: tx.accountId,
-          targetAccountId: tx.targetAccountId || '',
-          creditCardId: tx.creditCardId || '',
-          paymentMethod: tx.paymentMethod,
-          date: tx.date,
-          status: tx.status,
-          notes: tx.notes || '',
-          isRecurring: !!tx.isRecurring,
-          userId: currentUser.uid,
-          createdAt
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
-      }
+      await executeSync('transactions', newId, 'set', {
+        description: tx.description,
+        amount: tx.amount,
+        type: tx.type,
+        categoryId: tx.categoryId || 'cat-outros',
+        accountId: tx.accountId,
+        targetAccountId: tx.targetAccountId || '',
+        creditCardId: tx.creditCardId || '',
+        paymentMethod: tx.paymentMethod,
+        date: tx.date,
+        status: tx.status,
+        notes: tx.notes || '',
+        isRecurring: !!tx.isRecurring,
+        userId: currentUser.uid,
+        createdAt
+      });
     }
   };
 
@@ -537,15 +676,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, ...updatedFields } : tx));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/transactions/${id}`;
-      try {
-        await updateDoc(doc(db, 'users', currentUser.uid, 'transactions', id), {
-          ...updatedFields,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
-      }
+      await executeSync('transactions', id, 'update', {
+        ...updatedFields,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -554,12 +688,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions(prev => prev.filter(tx => tx.id !== id));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/transactions/${id}`;
-      try {
-        await deleteDoc(doc(db, 'users', currentUser.uid, 'transactions', id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, path);
-      }
+      await executeSync('transactions', id, 'delete');
     }
   };
 
@@ -582,21 +711,16 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setAccounts(prev => [...prev, newAcc]);
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/accounts/${newId}`;
-      try {
-        await setDoc(doc(db, 'users', currentUser.uid, 'accounts', newId), {
-          name: acc.name,
-          bankName: acc.bankName,
-          type: acc.type,
-          color: acc.color,
-          initialBalance: acc.initialBalance,
-          currentBalance: acc.initialBalance,
-          icon: acc.icon,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
-      }
+      await executeSync('accounts', newId, 'set', {
+        name: acc.name,
+        bankName: acc.bankName,
+        type: acc.type,
+        color: acc.color,
+        initialBalance: acc.initialBalance,
+        currentBalance: acc.initialBalance,
+        icon: acc.icon,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -604,15 +728,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setAccounts(prev => prev.map(acc => acc.id === id ? { ...acc, ...updatedFields } : acc));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/accounts/${id}`;
-      try {
-        await updateDoc(doc(db, 'users', currentUser.uid, 'accounts', id), {
-          ...updatedFields,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
-      }
+      await executeSync('accounts', id, 'update', {
+        ...updatedFields,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -621,12 +740,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setAccounts(prev => prev.filter(acc => acc.id !== id));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/accounts/${id}`;
-      try {
-        await deleteDoc(doc(db, 'users', currentUser.uid, 'accounts', id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, path);
-      }
+      await executeSync('accounts', id, 'delete');
     }
   };
 
@@ -642,21 +756,16 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCreditCards(prev => [...prev, newCard]);
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/creditCards/${newId}`;
-      try {
-        await setDoc(doc(db, 'users', currentUser.uid, 'creditCards', newId), {
-          name: card.name,
-          bankName: card.bankName,
-          color: card.color,
-          limit: card.limit,
-          closingDay: card.closingDay,
-          dueDay: card.dueDay,
-          currentInvoice: 0,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
-      }
+      await executeSync('creditCards', newId, 'set', {
+        name: card.name,
+        bankName: card.bankName,
+        color: card.color,
+        limit: card.limit,
+        closingDay: card.closingDay,
+        dueDay: card.dueDay,
+        currentInvoice: 0,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -664,15 +773,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCreditCards(prev => prev.map(c => c.id === id ? { ...c, ...updatedFields } : c));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/creditCards/${id}`;
-      try {
-        await updateDoc(doc(db, 'users', currentUser.uid, 'creditCards', id), {
-          ...updatedFields,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
-      }
+      await executeSync('creditCards', id, 'update', {
+        ...updatedFields,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -681,12 +785,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCreditCards(prev => prev.filter(c => c.id !== id));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/creditCards/${id}`;
-      try {
-        await deleteDoc(doc(db, 'users', currentUser.uid, 'creditCards', id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, path);
-      }
+      await executeSync('creditCards', id, 'delete');
     }
   };
 
@@ -697,15 +796,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCategories(prev => [...prev, newCat]);
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/categories/${newId}`;
-      try {
-        await setDoc(doc(db, 'users', currentUser.uid, 'categories', newId), {
-          ...cat,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
-      }
+      await executeSync('categories', newId, 'set', {
+        ...cat,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -713,15 +807,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCategories(prev => prev.map(c => c.id === id ? { ...c, ...updatedFields } : c));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/categories/${id}`;
-      try {
-        await updateDoc(doc(db, 'users', currentUser.uid, 'categories', id), {
-          ...updatedFields,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
-      }
+      await executeSync('categories', id, 'update', {
+        ...updatedFields,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -729,12 +818,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCategories(prev => prev.filter(c => c.id !== id));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/categories/${id}`;
-      try {
-        await deleteDoc(doc(db, 'users', currentUser.uid, 'categories', id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, path);
-      }
+      await executeSync('categories', id, 'delete');
     }
   };
 
@@ -754,17 +838,12 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     });
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/budgets/${budgetId}`;
-      try {
-        await setDoc(doc(db, 'users', currentUser.uid, 'budgets', budgetId), {
-          categoryId,
-          month: selectedMonth,
-          limitAmount,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, path);
-      }
+      await executeSync('budgets', budgetId, 'set', {
+        categoryId,
+        month: selectedMonth,
+        limitAmount,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -772,12 +851,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setBudgets(prev => prev.filter(b => b.id !== id));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/budgets/${id}`;
-      try {
-        await deleteDoc(doc(db, 'users', currentUser.uid, 'budgets', id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, path);
-      }
+      await executeSync('budgets', id, 'delete');
     }
   };
 
@@ -792,21 +866,16 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setGoals(prev => [...prev, newGoal]);
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/goals/${newId}`;
-      try {
-        await setDoc(doc(db, 'users', currentUser.uid, 'goals', newId), {
-          name: goal.name,
-          targetAmount: goal.targetAmount,
-          currentAmount: 0,
-          targetDate: goal.targetDate,
-          color: goal.color,
-          icon: goal.icon,
-          notes: goal.notes || '',
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
-      }
+      await executeSync('goals', newId, 'set', {
+        name: goal.name,
+        targetAmount: goal.targetAmount,
+        currentAmount: 0,
+        targetDate: goal.targetDate,
+        color: goal.color,
+        icon: goal.icon,
+        notes: goal.notes || '',
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -814,15 +883,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setGoals(prev => prev.map(g => g.id === id ? { ...g, ...updatedFields } : g));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/goals/${id}`;
-      try {
-        await updateDoc(doc(db, 'users', currentUser.uid, 'goals', id), {
-          ...updatedFields,
-          userId: currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
-      }
+      await executeSync('goals', id, 'update', {
+        ...updatedFields,
+        userId: currentUser.uid
+      });
     }
   };
 
@@ -830,12 +894,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setGoals(prev => prev.filter(g => g.id !== id));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/goals/${id}`;
-      try {
-        await deleteDoc(doc(db, 'users', currentUser.uid, 'goals', id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, path);
-      }
+      await executeSync('goals', id, 'delete');
     }
   };
 
@@ -896,9 +955,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions(prev => [...newTransactions, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
 
     if (currentUser) {
-      const batch = writeBatch(db);
-      const planRef = doc(db, 'users', currentUser.uid, 'installmentPlans', planId);
-      batch.set(planRef, {
+      const planPayload = {
         description: plan.description,
         totalAmount: plan.totalAmount,
         installmentAmount: plan.installmentAmount,
@@ -911,31 +968,84 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         startDate: plan.startDate,
         userId: currentUser.uid,
         createdAt
-      });
-
-      for (const tx of newTransactions) {
-        const txRef = doc(db, 'users', currentUser.uid, 'transactions', tx.id);
-        batch.set(txRef, {
-          description: tx.description,
-          amount: tx.amount,
-          type: tx.type,
-          categoryId: tx.categoryId,
-          accountId: tx.accountId,
-          creditCardId: tx.creditCardId || '',
-          paymentMethod: tx.paymentMethod,
-          date: tx.date,
-          status: tx.status,
-          installmentPlanId: planId,
-          installments: tx.installments,
-          userId: currentUser.uid,
-          createdAt
-        });
-      }
+      };
 
       try {
+        const batch = writeBatch(db);
+        const planRef = doc(db, 'users', currentUser.uid, 'installmentPlans', planId);
+        batch.set(planRef, planPayload);
+
+        for (const tx of newTransactions) {
+          const txRef = doc(db, 'users', currentUser.uid, 'transactions', tx.id);
+          batch.set(txRef, {
+            description: tx.description,
+            amount: tx.amount,
+            type: tx.type,
+            categoryId: tx.categoryId,
+            accountId: tx.accountId,
+            creditCardId: tx.creditCardId || '',
+            paymentMethod: tx.paymentMethod,
+            date: tx.date,
+            status: tx.status,
+            installmentPlanId: planId,
+            installments: tx.installments,
+            userId: currentUser.uid,
+            createdAt
+          });
+        }
+
         await batch.commit();
+
+        setPendingQueue(prev => {
+          let next = dequeueOperation(prev, 'installmentPlans', planId);
+          for (const tx of newTransactions) {
+            next = dequeueOperation(next, 'transactions', tx.id);
+          }
+          if (next.length === 0) {
+            setSyncStatus('synced');
+            setSyncError(null);
+          }
+          return next;
+        });
       } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `users/${currentUser.uid}/installmentPlans/${planId}`);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.warn(`[FinFlow Sync] Falha ao sincronizar parcelamento no Firestore (${planId}):`, errMsg);
+
+        setPendingQueue(prev => {
+          let next = enqueueOperation(prev, {
+            collection: 'installmentPlans',
+            docId: planId,
+            type: 'set',
+            payload: planPayload,
+            lastError: errMsg
+          });
+          for (const tx of newTransactions) {
+            next = enqueueOperation(next, {
+              collection: 'transactions',
+              docId: tx.id,
+              type: 'set',
+              payload: {
+                description: tx.description,
+                amount: tx.amount,
+                type: tx.type,
+                categoryId: tx.categoryId,
+                accountId: tx.accountId,
+                creditCardId: tx.creditCardId || '',
+                paymentMethod: tx.paymentMethod,
+                date: tx.date,
+                status: tx.status,
+                installmentPlanId: planId,
+                installments: tx.installments,
+                userId: currentUser.uid,
+                createdAt
+              },
+              lastError: errMsg
+            });
+          }
+          return next;
+        });
+        setSyncStatus('error');
+        setSyncError('Falha temporária ao sincronizar o parcelamento com a nuvem. Lançamentos preservados localmente.');
       }
     }
   };
@@ -948,18 +1058,53 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
 
     if (currentUser) {
-      const batch = writeBatch(db);
-      batch.delete(doc(db, 'users', currentUser.uid, 'installmentPlans', planId));
-      if (deleteTransactions) {
-        const associated = transactions.filter(t => t.installmentPlanId === planId);
-        for (const t of associated) {
-          batch.delete(doc(db, 'users', currentUser.uid, 'transactions', t.id));
-        }
-      }
+      const associated = transactions.filter(t => t.installmentPlanId === planId);
       try {
+        const batch = writeBatch(db);
+        batch.delete(doc(db, 'users', currentUser.uid, 'installmentPlans', planId));
+        if (deleteTransactions) {
+          for (const t of associated) {
+            batch.delete(doc(db, 'users', currentUser.uid, 'transactions', t.id));
+          }
+        }
         await batch.commit();
+
+        setPendingQueue(prev => {
+          let next = dequeueOperation(prev, 'installmentPlans', planId);
+          for (const t of associated) {
+            next = dequeueOperation(next, 'transactions', t.id);
+          }
+          if (next.length === 0) {
+            setSyncStatus('synced');
+            setSyncError(null);
+          }
+          return next;
+        });
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `users/${currentUser.uid}/installmentPlans/${planId}`);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.warn(`[FinFlow Sync] Falha ao excluir parcelamento no Firestore (${planId}):`, errMsg);
+
+        setPendingQueue(prev => {
+          let next = enqueueOperation(prev, {
+            collection: 'installmentPlans',
+            docId: planId,
+            type: 'delete',
+            lastError: errMsg
+          });
+          if (deleteTransactions) {
+            for (const t of associated) {
+              next = enqueueOperation(next, {
+                collection: 'transactions',
+                docId: t.id,
+                type: 'delete',
+                lastError: errMsg
+              });
+            }
+          }
+          return next;
+        });
+        setSyncStatus('error');
+        setSyncError('Falha temporária ao sincronizar exclusão do parcelamento. Ajustado localmente.');
       }
     }
   };
@@ -1139,6 +1284,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         selectedMonth,
         futureCommitments,
         isCloudSynced,
+        syncStatus,
+        syncError,
+        pendingSyncCount: pendingQueue.length,
+        retrySync,
         isDemoActive,
         clearSampleData,
         syncLocalToCloud,

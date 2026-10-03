@@ -31,7 +31,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
 }) => {
   const { hideValues, toggleHideValues, isPinEnabled, lockApp } = useSecurity();
-  const { selectedMonth, goToPreviousMonth, goToNextMonth, isCloudSynced } = useFinance();
+  const { selectedMonth, goToPreviousMonth, goToNextMonth, isCloudSynced, syncStatus, pendingSyncCount, retrySync } = useFinance();
   const { currentUser, signInWithGoogle, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -135,8 +135,20 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(prev => !prev)}
-                title={`Conectado como ${currentUser.email || currentUser.displayName}`}
-                className="flex items-center gap-1.5 p-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all text-xs"
+                title={
+                  syncStatus === 'error'
+                    ? `Falha de sincronização (${pendingSyncCount} pendentes). Clique para opções.`
+                    : syncStatus === 'pending'
+                    ? `${pendingSyncCount} alterações pendentes de sincronização.`
+                    : `Conectado e sincronizado como ${currentUser.email || currentUser.displayName}`
+                }
+                className={`flex items-center gap-1.5 p-1.5 rounded-lg border transition-all text-xs ${
+                  syncStatus === 'error'
+                    ? 'border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
+                    : syncStatus === 'pending'
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                }`}
               >
                 {currentUser.photoURL ? (
                   <img
@@ -150,7 +162,13 @@ export const Header: React.FC<HeaderProps> = ({
                     {(currentUser.email?.[0] || 'U').toUpperCase()}
                   </div>
                 )}
-                <Cloud className="w-3.5 h-3.5 text-emerald-400 hidden sm:inline" />
+                <Cloud className={`w-3.5 h-3.5 hidden sm:inline ${
+                  syncStatus === 'error'
+                    ? 'text-rose-400'
+                    : syncStatus === 'pending'
+                    ? 'text-amber-400 animate-pulse'
+                    : 'text-emerald-400'
+                }`} />
               </button>
 
               {/* User Dropdown */}
@@ -159,9 +177,27 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="px-3 py-2 border-b border-slate-800/80">
                     <p className="font-semibold text-white truncate">{currentUser.displayName || 'Usuário'}</p>
                     <p className="text-[11px] text-slate-400 truncate">{currentUser.email}</p>
-                    <div className="mt-1 flex items-center gap-1 text-[10px] text-emerald-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>Sincronização em nuvem ativa</span>
+                    <div className="mt-1 flex items-center gap-1.5 text-[10px]">
+                      {syncStatus === 'synced' ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          <span className="text-emerald-400">Sincronizado na nuvem</span>
+                        </>
+                      ) : syncStatus === 'pending' ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                          <span className="text-amber-400">{pendingSyncCount} {pendingSyncCount === 1 ? 'pendência' : 'pendências'}</span>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { retrySync(); }}
+                          className="flex items-center gap-1 text-rose-400 hover:text-rose-300 transition-colors"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                          <span className="underline">{pendingSyncCount} pendências (reenviar)</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
