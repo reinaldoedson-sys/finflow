@@ -13,6 +13,12 @@ export function calculateAccountBalance(
   let balanceCents = toCents(initialBalance);
 
   for (const tx of transactions) {
+    // Apenas transações concluídas afetam o saldo da conta bancária.
+    // Transações pendentes ('pending') não devem alterar o saldo realizado.
+    if (tx.status !== 'completed') {
+      continue;
+    }
+
     // Compras no cartão de crédito afetam a fatura do cartão, não o saldo imediato da conta corrente
     if (tx.paymentMethod === 'credit_card' && tx.creditCardId) {
       continue;
