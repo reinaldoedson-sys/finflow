@@ -59,8 +59,8 @@ export function splitMoney(totalAmount: number, numberOfInstallments: number): n
   if (numberOfInstallments === 1) return [fromCents(toCents(totalAmount))];
 
   const totalCents = toCents(totalAmount);
-  const baseCents = Math.floor(totalCents / numberOfInstallments);
-  let remainderCents = totalCents % numberOfInstallments;
+  const baseCents = Math.trunc(totalCents / numberOfInstallments);
+  const remainderCents = totalCents % numberOfInstallments;
 
   // Trata valores negativos se houver
   const sign = totalCents >= 0 ? 1 : -1;

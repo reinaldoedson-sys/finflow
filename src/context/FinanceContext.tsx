@@ -462,10 +462,16 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Recalculate account and credit card balances from the single source of truth (transactions)
   const computedAccounts = useMemo(() => {
-    return accounts.map(account => ({
-      ...account,
-      currentBalance: calculateAccountBalance(account.initialBalance, account.id, transactions)
-    }));
+    return accounts.map(account => {
+      const initial = typeof account.initialBalance === 'number'
+        ? account.initialBalance
+        : (typeof (account as any).currentBalance === 'number' ? (account as any).currentBalance : 0);
+      return {
+        ...account,
+        initialBalance: initial,
+        currentBalance: calculateAccountBalance(initial, account.id, transactions)
+      };
+    });
   }, [accounts, transactions]);
 
   const computedCreditCards = useMemo(() => {

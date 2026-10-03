@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "test": "tsx test/creditCardInvoice.test.ts",
+    "test": "tsx test/creditCardInvoice.test.ts && tsx test/derivedFields.test.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
