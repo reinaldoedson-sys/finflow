@@ -148,22 +148,40 @@ service cloud.firestore {
           && isValidId(goalId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['name', 'targetAmount', 'currentAmount', 'targetDate', 'color', 'userId'])
-          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'targetDate', 'color', 'icon', 'notes', 'userId'])
+          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'initialAmount', 'targetDate', 'color', 'icon', 'notes', 'userId'])
           && incoming().name is string && incoming().name.size() <= 80
           && incoming().targetAmount is number && incoming().targetAmount >= 0
           && incoming().currentAmount is number && incoming().currentAmount >= 0
+          && (!('initialAmount' in incoming()) || (incoming().initialAmount is number && incoming().initialAmount >= 0))
           && incoming().targetDate is string && incoming().targetDate.size() <= 10
           && incoming().color is string && incoming().color.size() <= 16;
         allow update: if isOwner(userId)
           && isValidId(goalId)
           && incoming().userId == userId
           && incoming().userId == existing().userId
-          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'targetDate', 'color', 'icon', 'notes', 'userId'])
+          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'initialAmount', 'targetDate', 'color', 'icon', 'notes', 'userId'])
           && incoming().name is string && incoming().name.size() <= 80
           && incoming().targetAmount is number && incoming().targetAmount >= 0
           && incoming().currentAmount is number && incoming().currentAmount >= 0
+          && (!('initialAmount' in incoming()) || (incoming().initialAmount is number && incoming().initialAmount >= 0))
           && incoming().targetDate is string && incoming().targetDate.size() <= 10
           && incoming().color is string && incoming().color.size() <= 16;
+      }
+
+      // Subcollection: Goal Movements (Ledger de metas - Etapa 7)
+      match /goalMovements/{movementId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(movementId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['goalId', 'type', 'amount', 'date', 'createdAt', 'userId'])
+          && incoming().keys().hasOnly(['goalId', 'type', 'amount', 'date', 'createdAt', 'notes', 'userId'])
+          && incoming().goalId is string && incoming().goalId.size() <= 128
+          && incoming().type in ['deposit', 'withdrawal']
+          && incoming().amount is number && incoming().amount > 0
+          && incoming().date is string && incoming().date.size() <= 10
+          && incoming().createdAt is string && incoming().createdAt.size() <= 64;
+        allow update: if false; // Movimentações são imutáveis
       }
 
       // Subcollection: Installment Plans

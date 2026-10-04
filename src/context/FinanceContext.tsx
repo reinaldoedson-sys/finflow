@@ -6,6 +6,8 @@ import {
   Category, 
   Budget, 
   FinancialGoal, 
+  GoalMovement,
+  GoalMovementType,
   CurrencyCode,
   InstallmentPlan 
 } from '../types/finance';
@@ -14,6 +16,7 @@ import {
   INITIAL_ACCOUNTS, 
   INITIAL_CREDIT_CARDS, 
   INITIAL_GOALS, 
+  INITIAL_GOAL_MOVEMENTS,
   INITIAL_BUDGETS, 
   INITIAL_TRANSACTIONS,
   INITIAL_INSTALLMENT_PLANS
@@ -39,6 +42,7 @@ import {
   calculateCreditCardInvoice, 
   calculateMonthlySummary,
   calculateFutureCommitments,
+  calculateGoalBalance,
   MonthCommitment
 } from '../domain/calculations';
 import { calculateInstallmentSchedule } from '../domain/installments';
@@ -61,6 +65,7 @@ interface FinanceContextType {
   categories: Category[];
   budgets: Budget[];
   goals: FinancialGoal[];
+  goalMovements: GoalMovement[];
   installmentPlans: InstallmentPlan[];
   currency: CurrencyCode;
   selectedMonth: string;
@@ -108,11 +113,13 @@ interface FinanceContextType {
   setBudget: (categoryId: string, limitAmount: number) => Promise<void>;
   deleteBudget: (id: string) => Promise<void>;
 
-  // Goal Actions
+  // Goal Actions & Ledger
   addGoal: (goal: Omit<FinancialGoal, 'id' | 'currentAmount'>) => Promise<void>;
   updateGoal: (id: string, goal: Partial<FinancialGoal>) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
-  addGoalDeposit: (id: string, amount: number) => Promise<void>;
+  addGoalDeposit: (id: string, amount: number, notes?: string, date?: string) => Promise<void>;
+  addGoalMovement: (movement: Omit<GoalMovement, 'id' | 'createdAt'>) => Promise<void>;
+  deleteGoalMovement: (id: string) => Promise<void>;
 
   // Analytics & Aggregates
   summary: {
@@ -194,8 +201,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     getInitialData('budgets', INITIAL_BUDGETS)
   );
 
-  const [goals, setGoals] = useState<FinancialGoal[]>(() =>
-    getInitialData('goals', INITIAL_GOALS)
+  const [goals, setGoals] = useState<FinancialGoal[]>(() => {
+    const rawGoals = getInitialData<FinancialGoal[]>('goals', INITIAL_GOALS);
+    return rawGoals.map(g => ({
+      ...g,
+      initialAmount: typeof g.initialAmount === 'number'
+        ? g.initialAmount
+        : (typeof g.currentAmount === 'number' ? g.currentAmount : 0)
+    }));
+  });
+
+  const [goalMovements, setGoalMovements] = useState<GoalMovement[]>(() =>
+    getInitialData('goal_movements', INITIAL_GOAL_MOVEMENTS)
   );
 
   const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>(() =>
@@ -245,6 +262,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify(goals));
   }, [goals]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify(goalMovements));
+  }, [goalMovements]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify(installmentPlans));
@@ -321,11 +342,33 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const unsubGoals = onSnapshot(
       collection(db, 'users', uid, 'goals'),
       (snapshot) => {
-        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FinancialGoal));
+        const list = snapshot.docs.map(doc => {
+          const data = doc.data();
+          const initialAmount = typeof data.initialAmount === 'number'
+            ? data.initialAmount
+            : (typeof data.currentAmount === 'number' ? data.currentAmount : 0);
+          return {
+            id: doc.id,
+            ...data,
+            initialAmount
+          } as FinancialGoal;
+        });
         setGoals(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'goals', prev));
       },
       (error) => {
         console.warn('[FinFlow Sync] Erro ao escutar metas no Firestore:', error);
+      }
+    );
+
+    // Listen to Goal Movements (Ledger de metas - Etapa 7)
+    const unsubGoalMovements = onSnapshot(
+      collection(db, 'users', uid, 'goalMovements'),
+      (snapshot) => {
+        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GoalMovement));
+        setGoalMovements(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'goalMovements', prev));
+      },
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar movimentações de metas no Firestore:', error);
       }
     );
 
@@ -362,6 +405,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       unsubCats();
       unsubBudgets();
       unsubGoals();
+      unsubGoalMovements();
       unsubPlans();
       unsubTransactions();
     };
@@ -625,6 +669,22 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }));
   }, [creditCards, transactions]);
 
+  // Recalculate goal balances from single source of truth (initialAmount + GoalMovements)
+  const computedGoals = useMemo(() => {
+    return goals.map(goal => {
+      const movements = goalMovements.filter(m => m.goalId === goal.id);
+      const initial = typeof goal.initialAmount === 'number'
+        ? goal.initialAmount
+        : (typeof goal.currentAmount === 'number' ? goal.currentAmount : 0);
+      const derivedBalance = calculateGoalBalance(initial, movements);
+      return {
+        ...goal,
+        initialAmount: initial,
+        currentAmount: derivedBalance
+      };
+    });
+  }, [goals, goalMovements]);
+
   // Monthly summary calculated via pure domain function
   const summary = useMemo(() => {
     return calculateMonthlySummary(computedAccounts, computedCreditCards, transactions, selectedMonth);
@@ -855,13 +915,15 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
-  // Goal Actions
+  // Goal Actions & Ledger
   const addGoal = async (goal: Omit<FinancialGoal, 'id' | 'currentAmount'>) => {
     const newId = generateId('goal');
+    const initialAmount = (goal as any).initialAmount ?? 0;
     const newGoal: FinancialGoal = {
       ...goal,
       id: newId,
-      currentAmount: 0
+      initialAmount,
+      currentAmount: initialAmount
     };
     setGoals(prev => [...prev, newGoal]);
 
@@ -869,7 +931,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       await executeSync('goals', newId, 'set', {
         name: goal.name,
         targetAmount: goal.targetAmount,
-        currentAmount: 0,
+        initialAmount,
+        currentAmount: initialAmount,
         targetDate: goal.targetDate,
         color: goal.color,
         icon: goal.icon,
@@ -892,17 +955,105 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const deleteGoal = async (id: string) => {
     setGoals(prev => prev.filter(g => g.id !== id));
+    const movementsToDelete = goalMovements.filter(m => m.goalId === id);
+    setGoalMovements(prev => prev.filter(m => m.goalId !== id));
 
     if (currentUser) {
       await executeSync('goals', id, 'delete');
+      for (const mov of movementsToDelete) {
+        await executeSync('goalMovements', mov.id, 'delete');
+      }
     }
   };
 
-  const addGoalDeposit = async (id: string, amount: number) => {
-    const goal = goals.find(g => g.id === id);
-    if (!goal) return;
-    const newAmount = Math.max(0, addMoney(goal.currentAmount, amount));
-    await updateGoal(id, { currentAmount: newAmount });
+  const addGoalMovement = async (movement: Omit<GoalMovement, 'id' | 'createdAt'>) => {
+    const newId = generateId('gmov');
+    const createdAt = new Date().toISOString();
+    const newMovement: GoalMovement = {
+      ...movement,
+      id: newId,
+      amount: Math.abs(movement.amount),
+      createdAt
+    };
+
+    setGoalMovements(prev => [...prev, newMovement]);
+
+    // Atualiza compatibilidade/cache no documento da meta
+    const targetGoal = goals.find(g => g.id === movement.goalId);
+    if (targetGoal) {
+      const remainingMovements = goalMovements.filter(m => m.goalId === movement.goalId);
+      const initial = typeof targetGoal.initialAmount === 'number'
+        ? targetGoal.initialAmount
+        : (typeof targetGoal.currentAmount === 'number' ? targetGoal.currentAmount : 0);
+      const updatedBalance = calculateGoalBalance(initial, [...remainingMovements, newMovement]);
+      
+      setGoals(prev => prev.map(g => g.id === targetGoal.id ? { ...g, currentAmount: updatedBalance } : g));
+      if (currentUser) {
+        await executeSync('goals', targetGoal.id, 'update', {
+          currentAmount: updatedBalance,
+          userId: currentUser.uid
+        });
+      }
+    }
+
+    if (currentUser) {
+      await executeSync('goalMovements', newId, 'set', {
+        goalId: newMovement.goalId,
+        type: newMovement.type,
+        amount: newMovement.amount,
+        date: newMovement.date,
+        createdAt: newMovement.createdAt,
+        notes: newMovement.notes || '',
+        userId: currentUser.uid
+      });
+    }
+  };
+
+  const addGoalDeposit = async (
+    id: string,
+    amount: number,
+    notes?: string,
+    date?: string
+  ) => {
+    const isWithdrawal = amount < 0;
+    const type: GoalMovementType = isWithdrawal ? 'withdrawal' : 'deposit';
+    const absAmount = Math.abs(amount);
+    const movDate = date || new Date().toISOString().split('T')[0];
+
+    await addGoalMovement({
+      goalId: id,
+      type,
+      amount: absAmount,
+      date: movDate,
+      notes: notes || (isWithdrawal ? 'Resgate da meta' : 'Aporte na meta')
+    });
+  };
+
+  const deleteGoalMovement = async (id: string) => {
+    const target = goalMovements.find(m => m.id === id);
+    setGoalMovements(prev => prev.filter(m => m.id !== id));
+
+    if (target) {
+      const goal = goals.find(g => g.id === target.goalId);
+      if (goal) {
+        const remainingMovements = goalMovements.filter(m => m.goalId === target.goalId && m.id !== id);
+        const initial = typeof goal.initialAmount === 'number'
+          ? goal.initialAmount
+          : (typeof goal.currentAmount === 'number' ? goal.currentAmount : 0);
+        const updatedBalance = calculateGoalBalance(initial, remainingMovements);
+        setGoals(prev => prev.map(g => g.id === goal.id ? { ...g, currentAmount: updatedBalance } : g));
+        if (currentUser) {
+          await executeSync('goals', goal.id, 'update', {
+            currentAmount: updatedBalance,
+            userId: currentUser.uid
+          });
+        }
+      }
+    }
+
+    if (currentUser) {
+      await executeSync('goalMovements', id, 'delete');
+    }
   };
 
   // Installment Plans CRUD
@@ -1120,6 +1271,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       creditCards,
       budgets,
       goals,
+      goalMovements,
       installmentPlans,
       transactions
     };
@@ -1163,6 +1315,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (payload.creditCards) setCreditCards(payload.creditCards);
       if (payload.budgets) setBudgets(payload.budgets);
       if (payload.goals) setGoals(payload.goals);
+      if (payload.goalMovements) setGoalMovements(payload.goalMovements);
       if (payload.installmentPlans) setInstallmentPlans(payload.installmentPlans);
       if (payload.transactions) setTransactions(payload.transactions);
       if (payload.currency) setCurrencyState(payload.currency);
@@ -1187,6 +1340,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCreditCards(INITIAL_CREDIT_CARDS);
     setBudgets(INITIAL_BUDGETS);
     setGoals(INITIAL_GOALS);
+    setGoalMovements(INITIAL_GOAL_MOVEMENTS);
     setInstallmentPlans(INITIAL_INSTALLMENT_PLANS);
     setTransactions(INITIAL_TRANSACTIONS);
     setCurrencyState('BRL');
@@ -1205,6 +1359,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(STORAGE_KEY_PREFIX + 'credit_cards', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'budgets', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify([]));
 
@@ -1212,12 +1367,13 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCreditCards([]);
     setBudgets([]);
     setGoals([]);
+    setGoalMovements([]);
     setInstallmentPlans([]);
     setTransactions([]);
 
     if (currentUser) {
       const uid = currentUser.uid;
-      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'installmentPlans'];
+      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans'];
       for (const sub of subcollections) {
         try {
           const snap = await getDocs(collection(db, 'users', uid, sub));
@@ -1241,6 +1397,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(STORAGE_KEY_PREFIX + 'credit_cards', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'budgets', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify([]));
 
@@ -1249,12 +1406,13 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCreditCards([]);
     setBudgets([]);
     setGoals([]);
+    setGoalMovements([]);
     setInstallmentPlans([]);
     setTransactions([]);
 
     if (currentUser) {
       const uid = currentUser.uid;
-      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'installmentPlans'];
+      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans'];
       for (const sub of subcollections) {
         try {
           const snap = await getDocs(collection(db, 'users', uid, sub));
@@ -1278,7 +1436,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         creditCards: computedCreditCards,
         categories,
         budgets,
-        goals,
+        goals: computedGoals,
+        goalMovements,
         installmentPlans,
         currency,
         selectedMonth,
@@ -1317,6 +1476,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         updateGoal,
         deleteGoal,
         addGoalDeposit,
+        addGoalMovement,
+        deleteGoalMovement,
         summary,
         exportData,
         importData,

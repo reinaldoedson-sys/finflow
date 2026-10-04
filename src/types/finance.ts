@@ -79,11 +79,24 @@ export interface Budget {
   limitAmount: number;
 }
 
+export type GoalMovementType = 'deposit' | 'withdrawal';
+
+export interface GoalMovement {
+  id: string;
+  goalId: string;
+  type: GoalMovementType;
+  amount: number; // Sempre positivo
+  date: string; // YYYY-MM-DD
+  createdAt: string; // ISO 8601
+  notes?: string;
+}
+
 export interface FinancialGoal {
   id: string;
   name: string;
   targetAmount: number;
-  currentAmount: number;
+  initialAmount?: number; // Saldo de abertura / inicial
+  currentAmount: number; // Saldo calculado derivado
   targetDate: string; // YYYY-MM-DD
   color: string;
   icon: string;

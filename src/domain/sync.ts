@@ -13,6 +13,7 @@ export type SyncCollection =
   | 'categories'
   | 'budgets'
   | 'goals'
+  | 'goalMovements'
   | 'installmentPlans';
 
 export type SyncOperationType = 'set' | 'update' | 'delete';
@@ -186,6 +187,14 @@ export function mergeCloudWithPending<T extends { id: string }>(
     if (setIds.has(localItem.id) && !seenIds.has(localItem.id) && !deleteIds.has(localItem.id)) {
       result.push(localItem);
       seenIds.add(localItem.id);
+    }
+  }
+
+  // 2b. Se houver operações 'set' com payload na fila que ainda não constavam no array local
+  for (const op of relevantOps) {
+    if (op.type === 'set' && op.payload && !seenIds.has(op.docId) && !deleteIds.has(op.docId)) {
+      result.push({ id: op.docId, ...op.payload } as T);
+      seenIds.add(op.docId);
     }
   }
 

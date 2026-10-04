@@ -146,24 +146,26 @@ export function calculateMonthlySummary(
   };
 }
 
-export interface GoalMovement {
-  id: string;
-  goalId: string;
-  amount: number; // positivo para aporte, negativo para resgate
-  date: string;
-  notes?: string;
-}
+import { GoalMovement, GoalMovementType } from '../types/finance';
+export type { GoalMovement, GoalMovementType };
 
 /**
- * Fonte única de verdade para saldo de meta financeira
+ * Fonte única de verdade para saldo de meta financeira (Etapa 7).
+ * Saldo = Math.max(0, initialAmount + depósitos - retiradas).
+ * Suporta o modelo canônico de ledger (amount estritamente positivo e type 'deposit' | 'withdrawal')
+ * além de compatibilidade retroativa com valores prévios com sinal.
  */
 export function calculateGoalBalance(
   initialAmount: number,
   movements: GoalMovement[] = []
 ): number {
-  let totalCents = toCents(initialAmount);
+  let totalCents = toCents(initialAmount || 0);
   for (const m of movements) {
-    totalCents += toCents(m.amount);
+    if (m.type === 'withdrawal' || (m.type as any) === 'withdraw' || m.amount < 0) {
+      totalCents -= toCents(Math.abs(m.amount));
+    } else {
+      totalCents += toCents(Math.abs(m.amount));
+    }
   }
   return Math.max(0, fromCents(totalCents));
 }

@@ -1,4 +1,4 @@
-import { Category, Account, CreditCard, Transaction, FinancialGoal, Budget, InstallmentPlan } from '../types/finance';
+import { Category, Account, CreditCard, Transaction, FinancialGoal, Budget, InstallmentPlan, GoalMovement } from '../types/finance';
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat-salario', name: 'Salário & Renda', icon: 'Briefcase', color: '#10b981', type: 'income' },
@@ -86,6 +86,7 @@ export const INITIAL_GOALS: FinancialGoal[] = [
     id: 'goal-1',
     name: 'Reserva de Emergência (6 meses)',
     targetAmount: 30000.00,
+    initialAmount: 21500.00,
     currentAmount: 21500.00,
     targetDate: '2026-12-31',
     color: '#10b981',
@@ -96,6 +97,7 @@ export const INITIAL_GOALS: FinancialGoal[] = [
     id: 'goal-2',
     name: 'Viagem de Férias para Europa',
     targetAmount: 14000.00,
+    initialAmount: 9200.00,
     currentAmount: 9200.00,
     targetDate: '2027-04-15',
     color: '#3b82f6',
@@ -106,6 +108,7 @@ export const INITIAL_GOALS: FinancialGoal[] = [
     id: 'goal-3',
     name: 'Upgrade Workstation / Laptop',
     targetAmount: 8500.00,
+    initialAmount: 8500.00,
     currentAmount: 8500.00,
     targetDate: '2026-10-30',
     color: '#a855f7',
@@ -113,6 +116,8 @@ export const INITIAL_GOALS: FinancialGoal[] = [
     notes: 'Meta 100% atingida!'
   }
 ];
+
+export const INITIAL_GOAL_MOVEMENTS: GoalMovement[] = [];
 
 export const INITIAL_BUDGETS: Budget[] = [
   { id: 'b-1', categoryId: 'cat-alimentacao', month: '2026-10', limitAmount: 2200.00 },
