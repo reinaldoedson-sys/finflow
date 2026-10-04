@@ -20,7 +20,11 @@ import {
   Cloud,
   LogIn,
   LogOut,
-  CheckCircle2
+  CheckCircle2,
+  Smartphone,
+  Sparkles,
+  ExternalLink,
+  Share2
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
 
@@ -74,6 +78,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
 
   // Confirmation modal for clear data
   const [confirmClear, setConfirmClear] = useState(false);
+
+  const [isStandalone] = useState(() => {
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true ||
+      document.referrer.includes('android-app://')
+    );
+  });
+  const [showApkGuide, setShowApkGuide] = useState(false);
 
   const handleSyncToCloud = async () => {
     setSyncFeedback('Sincronizando com Firestore...');
@@ -248,6 +261,122 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
               <LogIn className="w-4 h-4" />
               <span>Conectar com Google</span>
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile App & APK Integration Section */}
+      <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Smartphone className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Aplicativo no Celular & APK</h3>
+                <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> PWA / WebAPK
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">Instale no seu smartphone e mantenha tudo sincronizado com o computador</p>
+            </div>
+          </div>
+
+          {isStandalone && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              App Instalado
+            </span>
+          )}
+        </div>
+
+        {/* Como funciona a sincronização */}
+        <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-300 leading-relaxed">
+              <strong className="text-white">Sincronização Automática em Tempo Real:</strong> Como o FinFlow está conectado ao Firebase Firestore, basta fazer login com a sua conta Google no celular e no computador. Qualquer gasto, cartão, aporte ou meta cadastrado no celular sincroniza instantaneamente na versão web e vice-versa.
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-300 leading-relaxed">
+              <strong className="text-white">Funcionamento Offline no Smartphone:</strong> Se o seu celular ficar sem internet ou sem sinal, o app continua funcionando normalmente no aparelho. Assim que a conexão voltar, a fila de consistência sincroniza tudo automaticamente.
+            </div>
+          </div>
+        </div>
+
+        {/* Opções de Instalação e APK */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          {/* Opção 1: WebAPK Direto no Android */}
+          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  1. Instalação Direta (WebAPK Android)
+                </span>
+                <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                  Recomendado
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Abra o link do FinFlow no Google Chrome do seu celular, toque nos <strong>3 pontinhos do menu</strong> e selecione <strong>&quot;Instalar aplicativo&quot;</strong>. O Android gerará um APK nativo automaticamente no seu aparelho, com ícone próprio na tela de início e sem barra de navegador.
+              </p>
+            </div>
+          </div>
+
+          {/* Opção 2: Gerar arquivo .apk via PWABuilder */}
+          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Download className="w-4 h-4 text-cyan-400" />
+                  2. Gerar Arquivo .APK
+                </span>
+                <span className="text-[10px] text-cyan-400 font-semibold bg-cyan-500/10 px-1.5 py-0.5 rounded">
+                  Arquivo Físico
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Para compilar um pacote <code>.apk</code> ou <code>.aab</code> para distribuição externa ou sideloading, o FinFlow já possui Web App Manifest, ícones 192/512/maskable e Service Worker prontos para o <strong>PWABuilder</strong>.
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-slate-800/80 mt-3 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setShowApkGuide(prev => !prev)}
+                className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                {showApkGuide ? 'Ocultar Instruções' : 'Ver passo a passo do APK'}
+              </button>
+              <a
+                href="https://www.pwabuilder.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold"
+              >
+                <span>PWABuilder</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Passo a passo expandido para gerar o APK */}
+        {showApkGuide && (
+          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-2.5 animate-in fade-in duration-200">
+            <h4 className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+              <span>Como gerar o arquivo .APK em 3 passos:</span>
+            </h4>
+            <ol className="list-decimal list-inside space-y-1.5 text-slate-400 text-[11px] leading-relaxed">
+              <li>Acesse <a href="https://www.pwabuilder.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline font-semibold">pwabuilder.com</a> no navegador.</li>
+              <li>Cole a URL pública do seu FinFlow e clique em <strong>Start</strong> (o sistema validará o Manifest e os ícones criados).</li>
+              <li>Clique em <strong>Package for Stores</strong> &gt; selecione <strong>Android</strong> e baixe seu arquivo <strong>.apk</strong> assinado.</li>
+            </ol>
           </div>
         )}
       </div>

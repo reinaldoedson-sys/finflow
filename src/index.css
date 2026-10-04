@@ -10,6 +10,11 @@
     font-family: var(--font-sans);
     background-color: #0b0f17;
     color: #f1f5f9;
+    -webkit-tap-highlight-color: transparent;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 
   /* Custom scrollbar for modern sleek dark interface */

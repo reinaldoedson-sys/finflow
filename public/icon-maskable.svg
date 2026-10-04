@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0e1726" />
+      <stop offset="50%" stop-color="#0b0f17" />
+      <stop offset="100%" stop-color="#05080f" />
+    </linearGradient>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="50%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.0" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Full Background Canvas (covers entire maskable area) -->
+  <rect width="512" height="512" fill="url(#bgGrad)" />
+
+  <!-- Scaled content inside 80% safe zone (center = 256, scale = 0.76) -->
+  <g transform="translate(61.44, 61.44) scale(0.76)">
+    <!-- Ambient Glow Circle -->
+    <circle cx="256" cy="256" r="160" fill="url(#glowGrad)" filter="url(#glow)" />
+
+    <!-- Outer Stylized Flow Ring Segment -->
+    <path d="M 120,256 A 136,136 0 0,1 360,150" fill="none" stroke="url(#primaryGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="16 12" opacity="0.4" />
+    <path d="M 392,256 A 136,136 0 0,1 152,362" fill="none" stroke="url(#accentGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="16 12" opacity="0.4" />
+
+    <!-- FinFlow Emblem: Modern "F" Monogram with Trend Arrow -->
+    <g filter="url(#glow)">
+      <!-- Vertical dynamic spine -->
+      <path d="M 176,140 C 176,128 186,118 198,118 L 222,118 C 234,118 244,128 244,140 L 244,372 C 244,384 234,394 222,394 L 198,394 C 186,394 176,384 176,372 Z" fill="url(#primaryGrad)" />
+
+      <!-- Top Upper Wave / Crossbar -->
+      <path d="M 224,140 C 224,128 234,118 246,118 L 334,118 C 348,118 358,132 352,145 L 340,171 C 336,179 328,184 319,184 L 224,184 Z" fill="url(#primaryGrad)" />
+
+      <!-- Mid Wave Bar with Upward Arrow Momentum -->
+      <path d="M 224,226 C 224,214 234,204 246,204 L 304,204 C 318,204 328,218 322,231 L 310,257 C 306,265 298,270 289,270 L 224,270 Z" fill="url(#primaryGrad)" />
+
+      <!-- Dynamic Flow Growth Arrow (Surging Up-Right) -->
+      <path d="M 270,360 L 370,260" fill="none" stroke="url(#primaryGrad)" stroke-width="26" stroke-linecap="round" />
+      <path d="M 320,260 L 370,260 L 370,310" fill="none" stroke="url(#primaryGrad)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+
+      <!-- Glowing Node at Arrow Crest -->
+      <circle cx="370" cy="260" r="14" fill="#6ee7b7" />
+    </g>
+  </g>
+</svg>

@@ -11,6 +11,7 @@ import { GoalDepositModal } from './components/GoalDepositModal';
 import { BudgetModal } from './components/BudgetModal';
 import { BackupModal } from './components/BackupModal';
 import { InstallmentModal } from './components/InstallmentModal';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
@@ -145,6 +146,7 @@ const FinFlowApp: React.FC = () => {
 
       {/* Main View Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+        <PWAInstallBanner />
         {currentTab === 'dashboard' && (
           <DashboardView
             onOpenNewTransaction={handleOpenNewTransaction}
