@@ -581,6 +581,28 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         });
       }
 
+      // Seed investments
+      for (const inv of investments) {
+        const ref = doc(db, 'users', uid, 'investments', inv.id);
+        batch.set(ref, {
+          ticker: inv.ticker,
+          name: inv.name,
+          type: inv.type,
+          quantity: inv.quantity,
+          averagePrice: inv.averagePrice,
+          currentPrice: inv.currentPrice,
+          currency: inv.currency,
+          autoUpdate: !!inv.autoUpdate,
+          ...(inv.previousClose !== undefined ? { previousClose: inv.previousClose } : {}),
+          ...(inv.changePercent !== undefined ? { changePercent: inv.changePercent } : {}),
+          ...(inv.institution ? { institution: inv.institution } : {}),
+          ...(inv.lastPriceUpdate ? { lastPriceUpdate: inv.lastPriceUpdate } : {}),
+          ...(inv.notes ? { notes: inv.notes } : {}),
+          userId: uid,
+          createdAt: inv.createdAt
+        });
+      }
+
       await batch.commit();
     } catch (err) {
       console.error('Error syncing user cloud data:', err);
