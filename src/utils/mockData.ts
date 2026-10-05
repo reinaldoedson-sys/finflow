@@ -1,4 +1,4 @@
-import { Category, Account, CreditCard, Transaction, FinancialGoal, Budget, InstallmentPlan, GoalMovement } from '../types/finance';
+import { Category, Account, CreditCard, Transaction, FinancialGoal, Budget, InstallmentPlan, GoalMovement, InvestmentAsset } from '../types/finance';
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat-salario', name: 'Salário & Renda', icon: 'Briefcase', color: '#10b981', type: 'income' },
@@ -302,4 +302,73 @@ export const INITIAL_INSTALLMENT_PLANS: InstallmentPlan[] = [
     createdAt: '2026-09-15T10:00:00Z'
   }
 ];
+
+export const INITIAL_INVESTMENTS: InvestmentAsset[] = [
+  {
+    id: 'inv-petr4',
+    ticker: 'PETR4',
+    name: 'Petrobras PN',
+    type: 'stock',
+    quantity: 100,
+    averagePrice: 42.50,
+    currentPrice: 55.26,
+    previousClose: 51.17,
+    changePercent: 7.99,
+    currency: 'BRL',
+    institution: 'XP Investimentos',
+    autoUpdate: true,
+    lastPriceUpdate: new Date().toISOString(),
+    createdAt: '2026-06-01T10:00:00Z'
+  },
+  {
+    id: 'inv-mxrf11',
+    ticker: 'MXRF11',
+    name: 'Maxi Renda FII',
+    type: 'fii',
+    quantity: 300,
+    averagePrice: 9.80,
+    currentPrice: 9.17,
+    previousClose: 9.09,
+    changePercent: 0.88,
+    currency: 'BRL',
+    institution: 'XP Investimentos',
+    autoUpdate: true,
+    lastPriceUpdate: new Date().toISOString(),
+    createdAt: '2026-07-15T14:30:00Z'
+  },
+  {
+    id: 'inv-btc',
+    ticker: 'BTC',
+    name: 'Bitcoin',
+    type: 'crypto',
+    quantity: 0.045,
+    averagePrice: 380000.00,
+    currentPrice: 425900.00,
+    previousClose: 424500.00,
+    changePercent: 0.33,
+    currency: 'BRL',
+    institution: 'Binance',
+    autoUpdate: true,
+    lastPriceUpdate: new Date().toISOString(),
+    createdAt: '2026-08-01T09:00:00Z'
+  },
+  {
+    id: 'inv-tesouro',
+    ticker: 'Tesouro Selic 2029',
+    name: 'Tesouro Direto Selic',
+    type: 'fixed_income',
+    quantity: 1,
+    averagePrice: 15400.00,
+    currentPrice: 15720.50,
+    previousClose: 15715.00,
+    changePercent: 0.04,
+    currency: 'BRL',
+    institution: 'Nubank',
+    autoUpdate: false,
+    lastPriceUpdate: new Date().toISOString(),
+    notes: 'Reserva de liquidez rendendo 100% Selic',
+    createdAt: '2026-05-10T08:00:00Z'
+  }
+];
+
 

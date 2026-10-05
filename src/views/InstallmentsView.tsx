@@ -39,6 +39,8 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
 
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'all'>('active');
+  const [showAllPlansMobile, setShowAllPlansMobile] = useState(false);
 
   // Compute analytics per plan
   const plansWithProgress = useMemo(() => {
@@ -80,6 +82,15 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
     });
   }, [installmentPlans, transactions, selectedMonth]);
 
+  // Filtered and paginated plans
+  const filteredPlans = useMemo(() => {
+    if (statusFilter === 'active') return plansWithProgress.filter(p => !p.isCompleted);
+    if (statusFilter === 'completed') return plansWithProgress.filter(p => p.isCompleted);
+    return plansWithProgress;
+  }, [plansWithProgress, statusFilter]);
+
+  const displayedPlans = showAllPlansMobile ? filteredPlans : filteredPlans.slice(0, 3);
+
   // Global KPIs
   const totalRemainingDebt = plansWithProgress.reduce((sum, p) => sum + p.remainingAmount, 0);
   const totalCurrentMonthInstallments = plansWithProgress
@@ -88,83 +99,131 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
   const activePlansCount = plansWithProgress.filter(p => !p.isCompleted).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Top Banner & Primary Action */}
-      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800/80">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+      <div className="p-4 sm:p-6 rounded-2xl bg-slate-900/60 border border-slate-800/80">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
           <div>
-            <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
               Controle de Compras Futuras
             </span>
-            <h2 className="text-xl font-bold text-white tracking-tight">
+            <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
               Gestão de Parcelamentos & Carnês
             </h2>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
               Visualize suas compras parceladas no cartão de crédito, saldo devedor restante e estimativa de quitação
             </p>
           </div>
 
           <button
             onClick={onOpenNewInstallment}
-            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg shadow-sm transition-all flex items-center gap-1.5 self-start md:self-auto"
+            className="px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg shadow-sm transition-all flex items-center gap-1.5 self-start md:self-auto cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Novo Parcelamento</span>
           </button>
         </div>
 
-        {/* 3 KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-slate-800/80">
-          <div className="p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-              Saldo Devedor Restante
+        {/* 3 KPI Cards - Compact on mobile */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-800/80">
+          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
+            <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
+              Saldo Devedor
             </span>
-            <div className="text-xl font-bold font-mono text-rose-400">
+            <div className="text-xs sm:text-xl font-bold font-mono text-rose-400 truncate">
               {formatCurrency(totalRemainingDebt, currency, hideValues)}
             </div>
-            <span className="text-[11px] text-slate-500">Comprometido em compras parceladas</span>
+            <span className="text-[11px] text-slate-500 hidden sm:block">Comprometido em compras parceladas</span>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-              Parcelas no Mês Atual
+          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
+            <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
+              Parcelas no Mês
             </span>
-            <div className="text-xl font-bold font-mono text-white">
+            <div className="text-xs sm:text-xl font-bold font-mono text-white truncate">
               {formatCurrency(totalCurrentMonthInstallments, currency, hideValues)}
             </div>
-            <span className="text-[11px] text-slate-500">Impacto na fatura deste mês</span>
+            <span className="text-[11px] text-slate-500 hidden sm:block">Impacto na fatura deste mês</span>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-              Parcelamentos Ativos
+          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
+            <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
+              Ativos
             </span>
-            <div className="text-xl font-bold font-mono text-emerald-400">
-              {activePlansCount} compras ativas
+            <div className="text-xs sm:text-xl font-bold font-mono text-emerald-400 truncate">
+              {activePlansCount} compras
             </div>
-            <span className="text-[11px] text-slate-500">Em processo de quitação mensal</span>
+            <span className="text-[11px] text-slate-500 hidden sm:block">Em processo de quitação mensal</span>
           </div>
         </div>
       </div>
 
+      {/* Filter Tabs & Counter */}
+      {plansWithProgress.length > 0 && (
+        <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+          <div className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl">
+            <button
+              onClick={() => { setStatusFilter('active'); setShowAllPlansMobile(false); }}
+              className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                statusFilter === 'active'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Ativos ({activePlansCount})
+            </button>
+            <button
+              onClick={() => { setStatusFilter('completed'); setShowAllPlansMobile(false); }}
+              className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                statusFilter === 'completed'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Concluídos ({plansWithProgress.length - activePlansCount})
+            </button>
+            <button
+              onClick={() => { setStatusFilter('all'); setShowAllPlansMobile(false); }}
+              className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                statusFilter === 'all'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Todos ({plansWithProgress.length})
+            </button>
+          </div>
+
+          <span className="text-[11px] text-slate-400">
+            Mostrando {displayedPlans.length} de {filteredPlans.length}
+          </span>
+        </div>
+      )}
+
       {/* Installment Plans List */}
-      {plansWithProgress.length === 0 ? (
-        <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800/80">
-          <CardIcon className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-sm font-bold text-slate-200 mb-1">Nenhum parcelamento cadastrado</h3>
+      {filteredPlans.length === 0 ? (
+        <div className="p-8 sm:p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800/80">
+          <CardIcon className="w-8 h-8 sm:w-10 sm:h-10 text-slate-600 mx-auto mb-2 sm:mb-3" />
+          <h3 className="text-sm font-bold text-slate-200 mb-1">
+            {statusFilter === 'completed' ? 'Nenhum parcelamento concluído' : 'Nenhum parcelamento ativo encontrado'}
+          </h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
-            Cadastre compras parceladas no cartão de crédito ou boletos para planejar suas despesas dos próximos meses.
+            {statusFilter === 'completed'
+              ? 'Compras parceladas finalizadas e quitadas aparecerão listadas aqui.'
+              : 'Cadastre compras parceladas no cartão de crédito para planejar os próximos meses.'}
           </p>
-          <button
-            onClick={onOpenNewInstallment}
-            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-all"
-          >
-            Cadastrar primeiro parcelamento
-          </button>
+          {statusFilter === 'active' && (
+            <button
+              onClick={onOpenNewInstallment}
+              className="px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-all"
+            >
+              Cadastrar primeiro parcelamento
+            </button>
+          )}
         </div>
       ) : (
-        <div className="space-y-4">
-          {plansWithProgress.map(({ plan, transactions: planTxs, paidCount, totalCount, progressPercent, paidAmount, remainingAmount, remainingCount, monthTx, endDate, isCompleted }) => {
+        <div className="space-y-3 sm:space-y-4">
+          {displayedPlans.map(({ plan, transactions: planTxs, paidCount, totalCount, progressPercent, paidAmount, remainingAmount, remainingCount, monthTx, endDate, isCompleted }) => {
             const cat = categories.find(c => c.id === plan.categoryId);
             const card = creditCards.find(c => c.id === plan.creditCardId);
             const acc = accounts.find(a => a.id === plan.accountId);
@@ -340,6 +399,19 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
               </div>
             );
           })}
+
+          {filteredPlans.length > 3 && (
+            <div className="text-center pt-2">
+              <button
+                onClick={() => setShowAllPlansMobile((prev) => !prev)}
+                className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 rounded-xl transition-all shadow-sm cursor-pointer"
+              >
+                {showAllPlansMobile
+                  ? 'Mostrar menos parcelamentos'
+                  : `Mostrar mais parcelamentos (+${filteredPlans.length - 3})`}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

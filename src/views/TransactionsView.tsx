@@ -336,153 +336,277 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800/80 bg-slate-900/80 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4 w-12 text-center">Status</th>
-                  <th className="py-3 px-4">Data</th>
-                  <th className="py-3 px-4">Descrição</th>
-                  <th className="py-3 px-4">Categoria</th>
-                  <th className="py-3 px-4">Conta / Cartão</th>
-                  <th className="py-3 px-4 text-right">Valor</th>
-                  <th className="py-3 px-4 w-24 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {filteredTransactions.map((tx) => {
-                  const cat = categories.find(c => c.id === tx.categoryId);
-                  const acc = accounts.find(a => a.id === tx.accountId);
-                  const card = creditCards.find(c => c.id === tx.creditCardId);
-                  const targetAcc = accounts.find(a => a.id === tx.targetAccountId);
-                  const isIncome = tx.type === 'income';
-                  const isTransfer = tx.type === 'transfer';
-                  const isInstallmentTx = !!(tx.installmentPlanId || tx.installments || /\(\d+\/\d+\)/.test(tx.description));
+          <div>
+            {/* Mobile Native Card Feed (< md) */}
+            <div className="md:hidden divide-y divide-slate-800/80">
+              {filteredTransactions.map((tx) => {
+                const cat = categories.find((c) => c.id === tx.categoryId);
+                const acc = accounts.find((a) => a.id === tx.accountId);
+                const card = creditCards.find((c) => c.id === tx.creditCardId);
+                const targetAcc = accounts.find((a) => a.id === tx.targetAccountId);
+                const isIncome = tx.type === 'income';
+                const isTransfer = tx.type === 'transfer';
+                const isInstallmentTx = !!(tx.installmentPlanId || tx.installments || /\(\d+\/\d+\)/.test(tx.description));
 
-                  return (
-                    <tr
-                      key={tx.id}
-                      className="hover:bg-slate-800/40 transition-colors group"
-                    >
-                      {/* Checkbox toggle status */}
-                      <td className="py-3 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => toggleTransactionStatus(tx.id)}
-                          title={tx.status === 'completed' ? 'Marcar como pendente' : 'Marcar como concluído'}
-                          className={`w-5 h-5 rounded flex items-center justify-center transition-all ${
-                            tx.status === 'completed'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                              : 'border border-slate-700 hover:border-slate-500 text-transparent'
+                return (
+                  <div
+                    key={tx.id}
+                    className="p-3.5 hover:bg-slate-800/30 transition-colors flex flex-col gap-2.5 active:bg-slate-800/50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      {/* Left: Category Icon + Description + Meta */}
+                      <div 
+                        onClick={() => onEditTransaction(tx)}
+                        className="flex items-start gap-3 min-w-0 cursor-pointer flex-1"
+                      >
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            isIncome
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : isTransfer
+                              ? 'bg-blue-500/15 text-blue-400'
+                              : 'bg-rose-500/15 text-rose-400'
                           }`}
                         >
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
+                          <CategoryIcon name={cat?.icon || (isIncome ? 'ArrowUpRight' : 'ArrowDownRight')} color={cat?.color} className="w-4 h-4" />
+                        </div>
 
-                      {/* Date */}
-                      <td className="py-3 px-4 whitespace-nowrap font-mono text-slate-400 text-[11px]">
-                        {formatDateShort(tx.date)}
-                      </td>
-
-                      {/* Description + Tags + Installment badge */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-slate-200 group-hover:text-emerald-300 transition-colors">
-                            {tx.description}
-                          </span>
-                          {isInstallmentTx && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold font-mono bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                              <Layers className="w-3 h-3 text-purple-400" />
-                              {tx.installments
-                                ? `Parcela ${tx.installments.current}/${tx.installments.total}`
-                                : 'Parcelado'}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-white truncate max-w-[170px]">
+                              {tx.description}
                             </span>
-                          )}
-                        </div>
-                        {tx.tags && tx.tags.length > 0 && (
-                          <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
-                            {tx.tags.map((tag, i) => (
-                              <span key={i} className="text-slate-400">#{tag}</span>
-                            ))}
+                            {isInstallmentTx && (
+                              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 font-semibold">
+                                {tx.installments ? `${tx.installments.current}/${tx.installments.total}` : 'Parc.'}
+                              </span>
+                            )}
                           </div>
-                        )}
-                        {tx.notes && (
-                          <div className="text-[10px] text-slate-400 italic truncate max-w-xs mt-0.5">
-                            {tx.notes}
+
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5 truncate">
+                            <span>{formatDateShort(tx.date)}</span>
+                            <span>·</span>
+                            <span className="truncate">{cat?.name || 'Geral'}</span>
+                            <span>·</span>
+                            <span className="truncate">{card ? card.name : isTransfer ? `${acc?.name} → ${targetAcc?.name}` : acc?.name || 'Conta'}</span>
                           </div>
-                        )}
-                      </td>
-
-                      {/* Category */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <CategoryIcon name={cat?.icon || 'FileText'} color={cat?.color} className="w-3.5 h-3.5" />
-                          <span className="text-slate-300 text-xs">{cat?.name || 'Geral'}</span>
                         </div>
-                      </td>
+                      </div>
 
-                      {/* Account */}
-                      <td className="py-3 px-4 whitespace-nowrap text-slate-400 text-xs">
-                        {isTransfer ? (
-                          <span>{acc?.name} → {targetAcc?.name}</span>
-                        ) : card ? (
-                          <span className="text-purple-300">{card.name}</span>
-                        ) : (
-                          <span>{acc?.name || 'Conta'}</span>
-                        )}
-                      </td>
-
-                      {/* Amount */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                      {/* Right: Amount & Status Badge */}
+                      <div className="text-right shrink-0">
                         <div
-                          className={`font-mono font-bold text-xs ${
+                          className={`text-sm font-bold font-mono ${
                             isIncome
                               ? 'text-emerald-400'
                               : isTransfer
                               ? 'text-blue-400'
-                              : 'text-slate-200'
+                              : 'text-slate-100'
                           }`}
                         >
-                          {isIncome ? '+' : isTransfer ? '' : '-'}
-                          {formatCurrency(tx.amount, currency, hideValues)}
+                          {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(tx.amount, currency, hideValues)}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          {tx.status === 'completed' ? 'Concluído' : 'Pendente'}
-                        </div>
-                      </td>
 
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); toggleTransactionStatus(tx.id); }}
+                          className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all ${
+                            tx.status === 'completed'
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                          }`}
+                        >
+                          {tx.status === 'completed' ? <Check className="w-2.5 h-2.5" /> : <Clock className="w-2.5 h-2.5" />}
+                          <span>{tx.status === 'completed' ? 'Pago' : 'Pendente'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Action icons row on mobile */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800/40 text-[11px] text-slate-500">
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        {tx.paymentMethod && <span className="uppercase font-mono text-slate-400">{tx.paymentMethod}</span>}
+                        {tx.tags && tx.tags.length > 0 && <span>#{tx.tags.join(' #')}</span>}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleDuplicate(tx)}
+                          title="Duplicar"
+                          className="p-1 rounded text-slate-400 hover:text-white"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onEditTransaction(tx)}
+                          title="Editar"
+                          className="p-1 rounded text-slate-400 hover:text-white"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteTransaction(tx.id)}
+                          title="Excluir"
+                          className="p-1 rounded text-slate-400 hover:text-rose-400"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800/80 bg-slate-900/80 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-4 w-12 text-center">Status</th>
+                    <th className="py-3 px-4">Data</th>
+                    <th className="py-3 px-4">Descrição</th>
+                    <th className="py-3 px-4">Categoria</th>
+                    <th className="py-3 px-4">Conta / Cartão</th>
+                    <th className="py-3 px-4 text-right">Valor</th>
+                    <th className="py-3 px-4 w-24 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredTransactions.map((tx) => {
+                    const cat = categories.find((c) => c.id === tx.categoryId);
+                    const acc = accounts.find((a) => a.id === tx.accountId);
+                    const card = creditCards.find((c) => c.id === tx.creditCardId);
+                    const targetAcc = accounts.find((a) => a.id === tx.targetAccountId);
+                    const isIncome = tx.type === 'income';
+                    const isTransfer = tx.type === 'transfer';
+                    const isInstallmentTx = !!(tx.installmentPlanId || tx.installments || /\(\d+\/\d+\)/.test(tx.description));
+
+                    return (
+                      <tr
+                        key={tx.id}
+                        className="hover:bg-slate-800/40 transition-colors group"
+                      >
+                        {/* Checkbox toggle status */}
+                        <td className="py-3 px-4 text-center">
                           <button
-                            onClick={() => handleDuplicate(tx)}
-                            title="Duplicar transação"
-                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                            type="button"
+                            onClick={() => toggleTransactionStatus(tx.id)}
+                            title={tx.status === 'completed' ? 'Marcar como pendente' : 'Marcar como concluído'}
+                            className={`w-5 h-5 rounded flex items-center justify-center transition-all ${
+                              tx.status === 'completed'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                : 'border border-slate-700 hover:border-slate-500 text-transparent'
+                            }`}
                           >
-                            <Copy className="w-3.5 h-3.5" />
+                            <Check className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => onEditTransaction(tx)}
-                            title="Editar transação"
-                            className="p-1 rounded text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-colors"
+                        </td>
+
+                        {/* Date */}
+                        <td className="py-3 px-4 whitespace-nowrap font-mono text-slate-400 text-[11px]">
+                          {formatDateShort(tx.date)}
+                        </td>
+
+                        {/* Description + Tags + Installment badge */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-slate-200 group-hover:text-emerald-300 transition-colors">
+                              {tx.description}
+                            </span>
+                            {isInstallmentTx && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold font-mono bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                                <Layers className="w-3 h-3 text-purple-400" />
+                                {tx.installments
+                                  ? `Parcela ${tx.installments.current}/${tx.installments.total}`
+                                  : 'Parcelado'}
+                              </span>
+                            )}
+                          </div>
+                          {tx.tags && tx.tags.length > 0 && (
+                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                              {tx.tags.map((tag, i) => (
+                                <span key={i} className="text-slate-400">#{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                          {tx.notes && (
+                            <div className="text-[10px] text-slate-400 italic truncate max-w-xs mt-0.5">
+                              {tx.notes}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Category */}
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <CategoryIcon name={cat?.icon || 'FileText'} color={cat?.color} className="w-3.5 h-3.5" />
+                            <span className="text-slate-300 text-xs">{cat?.name || 'Geral'}</span>
+                          </div>
+                        </td>
+
+                        {/* Account */}
+                        <td className="py-3 px-4 whitespace-nowrap text-slate-400 text-xs">
+                          {isTransfer ? (
+                            <span>{acc?.name} → {targetAcc?.name}</span>
+                          ) : card ? (
+                            <span className="text-purple-300">{card.name}</span>
+                          ) : (
+                            <span>{acc?.name || 'Conta'}</span>
+                          )}
+                        </td>
+
+                        {/* Amount */}
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <div
+                            className={`font-mono font-bold text-xs ${
+                              isIncome
+                                ? 'text-emerald-400'
+                                : isTransfer
+                                ? 'text-blue-400'
+                                : 'text-slate-200'
+                            }`}
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteTransaction(tx.id)}
-                            title="Excluir transação"
-                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            {isIncome ? '+' : isTransfer ? '' : '-'}
+                            {formatCurrency(tx.amount, currency, hideValues)}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {tx.status === 'completed' ? 'Concluído' : 'Pendente'}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleDuplicate(tx)}
+                              title="Duplicar transação"
+                              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => onEditTransaction(tx)}
+                              title="Editar transação"
+                              className="p-1 rounded text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-colors"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => deleteTransaction(tx.id)}
+                              title="Excluir transação"
+                              className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

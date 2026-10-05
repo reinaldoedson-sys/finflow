@@ -11,18 +11,21 @@ import { GoalDepositModal } from './components/GoalDepositModal';
 import { BudgetModal } from './components/BudgetModal';
 import { BackupModal } from './components/BackupModal';
 import { InstallmentModal } from './components/InstallmentModal';
+import { InvestmentModal } from './components/InvestmentModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
+import { MobileBottomNav } from './components/MobileBottomNav';
 
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
 import { AccountsView } from './views/AccountsView';
+import { InvestmentsView } from './views/InvestmentsView';
 import { BudgetsView } from './views/BudgetsView';
 import { GoalsView } from './views/GoalsView';
 import { InstallmentsView } from './views/InstallmentsView';
 import { ReportsView } from './views/ReportsView';
 import { SettingsView } from './views/SettingsView';
 
-import { Transaction, Account, CreditCard, FinancialGoal } from './types/finance';
+import { Transaction, Account, CreditCard, FinancialGoal, InvestmentAsset } from './types/finance';
 import { ShieldCheck } from 'lucide-react';
 
 const FinFlowApp: React.FC = () => {
@@ -46,6 +49,9 @@ const FinFlowApp: React.FC = () => {
   const [selectedGoalForDeposit, setSelectedGoalForDeposit] = useState<FinancialGoal | null>(null);
 
   const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
+
+  const [isInvestmentModalOpen, setIsInvestmentModalOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<InvestmentAsset | null>(null);
 
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [budgetCatId, setBudgetCatId] = useState<string | undefined>(undefined);
@@ -134,6 +140,16 @@ const FinFlowApp: React.FC = () => {
     setIsBudgetModalOpen(true);
   };
 
+  const handleOpenNewInvestment = () => {
+    setEditingAsset(null);
+    setIsInvestmentModalOpen(true);
+  };
+
+  const handleEditInvestment = (asset: InvestmentAsset) => {
+    setEditingAsset(asset);
+    setIsInvestmentModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-[#0b0f17] text-slate-100 selection:bg-emerald-500/20 selection:text-emerald-300">
       {/* Top Bar Navigation */}
@@ -145,7 +161,7 @@ const FinFlowApp: React.FC = () => {
       />
 
       {/* Main View Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-24 md:pb-6">
         <PWAInstallBanner />
         {currentTab === 'dashboard' && (
           <DashboardView
@@ -171,6 +187,13 @@ const FinFlowApp: React.FC = () => {
             onOpenNewCreditCard={handleOpenNewCreditCard}
             onEditAccount={handleEditAccount}
             onEditCreditCard={handleEditCreditCard}
+          />
+        )}
+
+        {currentTab === 'investments' && (
+          <InvestmentsView
+            onOpenNewInvestment={handleOpenNewInvestment}
+            onEditInvestment={handleEditInvestment}
           />
         )}
 
@@ -206,7 +229,7 @@ const FinFlowApp: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 text-center text-xs text-slate-500">
+      <footer className="mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 pb-24 md:pb-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -222,6 +245,13 @@ const FinFlowApp: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Mobile Native Bottom Navigation */}
+      <MobileBottomNav
+        currentTab={currentTab}
+        onTabChange={setCurrentTab}
+        onOpenNewTransaction={handleOpenNewTransaction}
+      />
 
       {/* Modals & Overlays */}
       <PinLockModal />
@@ -262,6 +292,12 @@ const FinFlowApp: React.FC = () => {
       <InstallmentModal
         isOpen={isInstallmentModalOpen}
         onClose={() => setIsInstallmentModalOpen(false)}
+      />
+
+      <InvestmentModal
+        isOpen={isInvestmentModalOpen}
+        onClose={() => setIsInvestmentModalOpen(false)}
+        editAsset={editingAsset}
       />
 
       <BackupModal

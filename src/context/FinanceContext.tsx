@@ -9,7 +9,8 @@ import {
   GoalMovement,
   GoalMovementType,
   CurrencyCode,
-  InstallmentPlan 
+  InstallmentPlan,
+  InvestmentAsset 
 } from '../types/finance';
 import { 
   DEFAULT_CATEGORIES, 
@@ -19,8 +20,10 @@ import {
   INITIAL_GOAL_MOVEMENTS,
   INITIAL_BUDGETS, 
   INITIAL_TRANSACTIONS,
-  INITIAL_INSTALLMENT_PLANS
+  INITIAL_INSTALLMENT_PLANS,
+  INITIAL_INVESTMENTS
 } from '../utils/mockData';
+import { fetchMarketQuotes } from '../services/marketQuotes';
 import { getCurrentMonth, getPreviousMonth, getNextMonth } from '../utils/currency';
 import { encryptData, decryptData } from '../utils/crypto';
 import { useAuth } from './AuthContext';
@@ -67,6 +70,7 @@ interface FinanceContextType {
   goals: FinancialGoal[];
   goalMovements: GoalMovement[];
   installmentPlans: InstallmentPlan[];
+  investments: InvestmentAsset[];
   currency: CurrencyCode;
   selectedMonth: string;
   futureCommitments: MonthCommitment[];
@@ -83,6 +87,15 @@ interface FinanceContextType {
   goToPreviousMonth: () => void;
   goToNextMonth: () => void;
   goToCurrentMonth: () => void;
+
+  // Investment Actions
+  addInvestment: (asset: Omit<InvestmentAsset, 'id' | 'createdAt'>) => Promise<string>;
+  updateInvestment: (id: string, updates: Partial<InvestmentAsset>) => Promise<void>;
+  deleteInvestment: (id: string) => Promise<void>;
+  refreshInvestmentQuotes: () => Promise<void>;
+  loadSampleInvestments: () => Promise<void>;
+  isRefreshingQuotes: boolean;
+  lastQuotesUpdate: string | null;
 
   // Installment Plan Actions
   addInstallmentPlan: (plan: Omit<InstallmentPlan, 'id' | 'createdAt'>) => Promise<void>;
@@ -158,8 +171,19 @@ const getInitialData = <T,>(key: string, defaultValue: T): T => {
 
     const stored = localStorage.getItem(STORAGE_KEY_PREFIX + key);
     if (stored !== null) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      if (!isDemoCleared && key === 'investments' && Array.isArray(parsed) && parsed.length === 0) {
+        localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(defaultValue));
+        return defaultValue;
+      }
+      return parsed;
     }
+
+    if (!isDemoCleared) {
+      localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(defaultValue));
+      return defaultValue;
+    }
+
     const hasInit = localStorage.getItem(HAS_INITIALIZED_KEY);
     if (hasInit) {
       return (Array.isArray(defaultValue) ? [] : defaultValue) as unknown as T;
@@ -223,6 +247,12 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     getInitialData('transactions', INITIAL_TRANSACTIONS)
   );
 
+  const [investments, setInvestments] = useState<InvestmentAsset[]>(() =>
+    getInitialData('investments', INITIAL_INVESTMENTS)
+  );
+  const [isRefreshingQuotes, setIsRefreshingQuotes] = useState(false);
+  const [lastQuotesUpdate, setLastQuotesUpdate] = useState<string | null>(null);
+
   // Set initial flag after first boot
   useEffect(() => {
     localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
@@ -282,6 +312,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'credit_cards', JSON.stringify(creditCards));
   }, [creditCards]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(investments));
+  }, [investments]);
 
   // Real-time Firestore Sync when user is authenticated
   useEffect(() => {
@@ -399,6 +433,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
     );
 
+    // Listen to Investments
+    const unsubInvestments = onSnapshot(
+      collection(db, 'users', uid, 'investments'),
+      (snapshot) => {
+        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InvestmentAsset));
+        setInvestments(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'investments', prev));
+      },
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar investimentos no Firestore:', error);
+      }
+    );
+
     return () => {
       unsubAccounts();
       unsubCards();
@@ -408,6 +454,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       unsubGoalMovements();
       unsubPlans();
       unsubTransactions();
+      unsubInvestments();
     };
   }, [currentUser, isAuthReady]);
 
@@ -1260,6 +1307,103 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
+  // Investment Actions
+  const refreshInvestmentQuotes = async () => {
+    if (investments.length === 0) return;
+    setIsRefreshingQuotes(true);
+
+    const autoTickers = investments
+      .filter(inv => inv.autoUpdate && inv.ticker)
+      .map(inv => inv.ticker);
+
+    if (autoTickers.length === 0) {
+      setIsRefreshingQuotes(false);
+      return;
+    }
+
+    try {
+      const { quotes } = await fetchMarketQuotes(autoTickers);
+      if (quotes && Object.keys(quotes).length > 0) {
+        setInvestments(prev => prev.map(inv => {
+          const upper = inv.ticker.toUpperCase();
+          const q = quotes[upper] || quotes[`${upper}.SA`];
+          if (q && typeof q.price === 'number') {
+            return {
+              ...inv,
+              currentPrice: q.price,
+              previousClose: q.previousClose,
+              changePercent: q.changePercent,
+              lastPriceUpdate: q.updatedAt || new Date().toISOString()
+            };
+          }
+          return inv;
+        }));
+        setLastQuotesUpdate(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+      }
+    } catch (err) {
+      console.warn('Erro ao atualizar cotações de investimentos:', err);
+    } finally {
+      setIsRefreshingQuotes(false);
+    }
+  };
+
+  // Initial quotes refresh on boot
+  useEffect(() => {
+    refreshInvestmentQuotes();
+  }, []);
+
+  const addInvestment = async (asset: Omit<InvestmentAsset, 'id' | 'createdAt'>): Promise<string> => {
+    const newId = generateId('inv');
+    const createdAt = new Date().toISOString();
+    const newAsset: InvestmentAsset = {
+      ...asset,
+      id: newId,
+      createdAt
+    };
+
+    setInvestments(prev => [...prev, newAsset]);
+
+    if (currentUser) {
+      await executeSync('investments', newId, 'set', {
+        ...newAsset,
+        userId: currentUser.uid
+      });
+    }
+
+    if (newAsset.autoUpdate && newAsset.ticker) {
+      setTimeout(() => {
+        refreshInvestmentQuotes();
+      }, 200);
+    }
+
+    return newId;
+  };
+
+  const updateInvestment = async (id: string, updates: Partial<InvestmentAsset>) => {
+    setInvestments(prev => prev.map(inv => inv.id === id ? { ...inv, ...updates } : inv));
+
+    if (currentUser) {
+      await executeSync('investments', id, 'update', {
+        ...updates,
+        userId: currentUser.uid
+      });
+    }
+  };
+
+  const deleteInvestment = async (id: string) => {
+    setInvestments(prev => prev.filter(inv => inv.id !== id));
+
+    if (currentUser) {
+      await executeSync('investments', id, 'delete');
+    }
+  };
+
+  const loadSampleInvestments = async () => {
+    setInvestments(INITIAL_INVESTMENTS);
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(INITIAL_INVESTMENTS));
+    await refreshInvestmentQuotes();
+  };
+
   // Backup & Restore
   const exportData = async (passphrase?: string): Promise<string> => {
     const backupPayload = {
@@ -1273,7 +1417,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       goals,
       goalMovements,
       installmentPlans,
-      transactions
+      transactions,
+      investments
     };
 
     const jsonString = JSON.stringify(backupPayload, null, 2);
@@ -1318,6 +1463,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (payload.goalMovements) setGoalMovements(payload.goalMovements);
       if (payload.installmentPlans) setInstallmentPlans(payload.installmentPlans);
       if (payload.transactions) setTransactions(payload.transactions);
+      if (payload.investments) setInvestments(payload.investments);
       if (payload.currency) setCurrencyState(payload.currency);
 
       if (currentUser) {
@@ -1343,6 +1489,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setGoalMovements(INITIAL_GOAL_MOVEMENTS);
     setInstallmentPlans(INITIAL_INSTALLMENT_PLANS);
     setTransactions(INITIAL_TRANSACTIONS);
+    setInvestments(INITIAL_INVESTMENTS);
     setCurrencyState('BRL');
     setSelectedMonth(getCurrentMonth());
 
@@ -1362,6 +1509,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify([]));
 
     setAccounts([]);
     setCreditCards([]);
@@ -1370,10 +1518,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setGoalMovements([]);
     setInstallmentPlans([]);
     setTransactions([]);
+    setInvestments([]);
 
     if (currentUser) {
       const uid = currentUser.uid;
-      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans'];
+      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans', 'investments'];
       for (const sub of subcollections) {
         try {
           const snap = await getDocs(collection(db, 'users', uid, sub));
@@ -1400,6 +1549,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify([]));
 
     setCategories(DEFAULT_CATEGORIES);
     setAccounts([]);
@@ -1409,10 +1559,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setGoalMovements([]);
     setInstallmentPlans([]);
     setTransactions([]);
+    setInvestments([]);
 
     if (currentUser) {
       const uid = currentUser.uid;
-      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans'];
+      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans', 'investments'];
       for (const sub of subcollections) {
         try {
           const snap = await getDocs(collection(db, 'users', uid, sub));
@@ -1439,6 +1590,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         goals: computedGoals,
         goalMovements,
         installmentPlans,
+        investments,
         currency,
         selectedMonth,
         futureCommitments,
@@ -1455,6 +1607,13 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         goToPreviousMonth,
         goToNextMonth,
         goToCurrentMonth,
+        addInvestment,
+        updateInvestment,
+        deleteInvestment,
+        refreshInvestmentQuotes,
+        loadSampleInvestments,
+        isRefreshingQuotes,
+        lastQuotesUpdate,
         addInstallmentPlan,
         deleteInstallmentPlan,
         addTransaction,

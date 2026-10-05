@@ -213,6 +213,23 @@ service cloud.firestore {
           && incoming().startDate is string && incoming().startDate.size() <= 10;
       }
 
+      // Subcollection: Investments
+      match /investments/{investmentId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(investmentId)
+          && incoming().userId == userId
+          && incoming().keys().hasAll(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'currency', 'userId', 'createdAt'])
+          && incoming().ticker is string && incoming().ticker.size() <= 32
+          && incoming().name is string && incoming().name.size() <= 80
+          && incoming().quantity is number && incoming().quantity >= 0
+          && incoming().averagePrice is number && incoming().averagePrice >= 0
+          && incoming().currentPrice is number && incoming().currentPrice >= 0;
+        allow update: if isOwner(userId)
+          && isValidId(investmentId)
+          && incoming().userId == userId;
+      }
+
       // Subcollection: Transactions
       match /transactions/{transactionId} {
         allow get, list, delete: if isOwner(userId);

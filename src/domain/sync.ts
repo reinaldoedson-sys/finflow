@@ -14,7 +14,8 @@ export type SyncCollection =
   | 'budgets'
   | 'goals'
   | 'goalMovements'
-  | 'installmentPlans';
+  | 'installmentPlans'
+  | 'investments';
 
 export type SyncOperationType = 'set' | 'update' | 'delete';
 

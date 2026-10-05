@@ -334,14 +334,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Download className="w-4 h-4 text-cyan-400" />
-                  2. Gerar Arquivo .APK
+                  2. Gerar Arquivo .APK Físico
                 </span>
                 <span className="text-[10px] text-cyan-400 font-semibold bg-cyan-500/10 px-1.5 py-0.5 rounded">
-                  Arquivo Físico
+                  Distribuição
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Para compilar um pacote <code>.apk</code> ou <code>.aab</code> para distribuição externa ou sideloading, o FinFlow já possui Web App Manifest, ícones 192/512/maskable e Service Worker prontos para o <strong>PWABuilder</strong>.
+                Ferramentas como o PWABuilder exigem que a URL esteja publicada publicamente sem proteção de login de desenvolvedor. Para o ambiente de pré-visualização, a <strong>Opção 1 (Instalação Direta no Chrome)</strong> é a forma oficial recomendada pelo Google.
               </p>
             </div>
 
@@ -351,7 +351,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
                 onClick={() => setShowApkGuide(prev => !prev)}
                 className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
               >
-                {showApkGuide ? 'Ocultar Instruções' : 'Ver passo a passo do APK'}
+                {showApkGuide ? 'Ocultar Dicas' : 'Ver como funciona'}
               </button>
               <a
                 href="https://www.pwabuilder.com"
@@ -370,13 +370,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
         {showApkGuide && (
           <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-2.5 animate-in fade-in duration-200">
             <h4 className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
-              <span>Como gerar o arquivo .APK em 3 passos:</span>
+              <span>Por que o PWABuilder não abre o link de desenvolvimento?</span>
             </h4>
-            <ol className="list-decimal list-inside space-y-1.5 text-slate-400 text-[11px] leading-relaxed">
-              <li>Acesse <a href="https://www.pwabuilder.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline font-semibold">pwabuilder.com</a> no navegador.</li>
-              <li>Cole a URL pública do seu FinFlow e clique em <strong>Start</strong> (o sistema validará o Manifest e os ícones criados).</li>
-              <li>Clique em <strong>Package for Stores</strong> &gt; selecione <strong>Android</strong> e baixe seu arquivo <strong>.apk</strong> assinado.</li>
-            </ol>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              O PWABuilder roda em servidores externos da Microsoft na nuvem. Os links de desenvolvimento do AI Studio (<code>.run.app</code>) possuem proteção de sessão da Google Cloud que bloqueia robôs rastreadores externos.
+            </p>
+            <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] space-y-1">
+              <strong className="block text-emerald-200">Como instalar no seu celular agora mesmo:</strong>
+              <ol className="list-decimal list-inside space-y-1 text-slate-300">
+                <li>Abra o link do FinFlow no <strong>Google Chrome</strong> do seu smartphone.</li>
+                <li>Toque no banner verde <strong>&quot;Instalar FinFlow no Celular&quot;</strong> ou no menu do Chrome (três pontinhos) &gt; <strong>&quot;Instalar aplicativo&quot;</strong>.</li>
+                <li>O Android gera um <strong>WebAPK assinado</strong> na sua gaveta de apps. Ele roda como aplicativo nativo (tela inteira, ícone próprio e sem barra de URL) e sincroniza tudo com seu computador!</li>
+              </ol>
+            </div>
           </div>
         )}
       </div>

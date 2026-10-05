@@ -111,4 +111,37 @@ export interface SecuritySettings {
   lastUnlockedAt?: number;
 }
 
+export type AssetClass = 'stock' | 'fii' | 'crypto' | 'fixed_income' | 'bdr_etf' | 'other';
+
+export interface InvestmentAsset {
+  id: string;
+  ticker: string;              // ex: PETR4, VALE3, MXRF11, BTC, Tesouro Selic 2029
+  name: string;                // ex: Petrobras PN, Vale S.A., Maxi Renda, Bitcoin
+  type: AssetClass;            // Ação, FII, Cripto, Renda Fixa, etc.
+  quantity: number;            // Quantidade de cotas ou frações
+  averagePrice: number;        // Preço médio pago por cota
+  currentPrice: number;        // Preço atual de mercado
+  previousClose?: number;      // Fechamento anterior para variação diária
+  changePercent?: number;      // Variação % do dia
+  currency: 'BRL' | 'USD';
+  institution?: string;        // Corretora ou Banco (XP, NuInvest, Rico, BTG, Binance)
+  autoUpdate: boolean;         // Se atualiza preço automaticamente via cotação online
+  lastPriceUpdate?: string;    // Data e hora da última cotação obtida
+  notes?: string;
+  createdAt: string;
+}
+
+export interface InvestmentTransaction {
+  id: string;
+  assetId: string;
+  type: 'buy' | 'sell' | 'dividend';
+  date: string;                // YYYY-MM-DD
+  quantity: number;
+  price: number;
+  totalAmount: number;
+  notes?: string;
+  createdAt: string;
+}
+
 export type CurrencyCode = 'BRL' | 'USD' | 'EUR';
+
