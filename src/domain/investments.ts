@@ -285,3 +285,53 @@ export function getPortfolioSummaryByCurrency(
 
   return result;
 }
+
+export interface AporteCalculationResult {
+  newQuantity: number;
+  newAveragePrice: number;
+  newTotalCost: number;
+  totalAporteAmount: number;
+}
+
+/**
+ * Calcula a nova posição (quantidade e preço médio ponderado) de um ativo após um aporte.
+ * Fórmula do Preço Médio Ponderado:
+ * Novo Custo Total = (Q_antiga * PreçoMédio_antigo) + (Q_aporte * Preço_aporte)
+ * Nova Quantidade = Q_antiga + Q_aporte
+ * Novo Preço Médio = Novo Custo Total / Nova Quantidade
+ */
+export function calculateAportePosition(
+  currentPosition: { quantity: number; averagePrice: number },
+  aporte: { quantity: number; price: number }
+): AporteCalculationResult {
+  const currentQty = Math.max(0, currentPosition.quantity || 0);
+  const currentAvgPrice = Math.max(0, currentPosition.averagePrice || 0);
+  const aporteQty = Math.max(0, aporte.quantity || 0);
+  const aportePrice = Math.max(0, aporte.price || 0);
+
+  if (aporteQty <= 0 || aportePrice <= 0) {
+    const currentCost = calculateInvestmentCost({ quantity: currentQty, averagePrice: currentAvgPrice });
+    return {
+      newQuantity: currentQty,
+      newAveragePrice: currentAvgPrice,
+      newTotalCost: currentCost,
+      totalAporteAmount: 0
+    };
+  }
+
+  const currentCostCents = Math.round(currentQty * toCents(currentAvgPrice));
+  const aporteCostCents = Math.round(aporteQty * toCents(aportePrice));
+  const newCostCents = currentCostCents + aporteCostCents;
+  const newQuantity = currentQty + aporteQty;
+
+  const newAveragePrice = newQuantity > 0
+    ? fromCents(Math.round(newCostCents / newQuantity))
+    : 0;
+
+  return {
+    newQuantity,
+    newAveragePrice,
+    newTotalCost: fromCents(newCostCents),
+    totalAporteAmount: fromCents(aporteCostCents)
+  };
+}

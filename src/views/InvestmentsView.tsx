@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { InvestmentAsset, AssetClass } from '../types/finance';
@@ -20,9 +20,15 @@ import {
   Coins, 
   LineChart,
   Info,
-  History
+  History,
+  Cloud,
+  CloudOff,
+  LogIn
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { InvestmentTransactionModal } from '../components/InvestmentTransactionModal';
+import { InvestmentDepositModal } from '../components/InvestmentDepositModal';
+import { InvestmentDetailModal } from '../components/InvestmentDetailModal';
 import {
   calculateInvestmentCost,
   calculateInvestmentValue,
@@ -62,13 +68,42 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
     refreshInvestmentQuotes, 
     loadSampleInvestments,
     isRefreshingQuotes, 
-    lastQuotesUpdate 
+    lastQuotesUpdate,
+    syncStatus,
+    syncError,
+    pendingSyncCount,
+    retrySync
   } = useFinance();
+  const { currentUser, signInWithGoogle } = useAuth();
   const { hideValues } = useSecurity();
 
   const [selectedFilter, setSelectedFilter] = useState<'all' | AssetClass>('all');
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [selectedTxAssetId, setSelectedTxAssetId] = useState<string | null>(null);
+  const [isAporteModalOpen, setIsAporteModalOpen] = useState(false);
+  const [selectedAporteAssetId, setSelectedAporteAssetId] = useState<string | null>(null);
+  const [selectedDetailAsset, setSelectedDetailAsset] = useState<InvestmentAsset | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  const handleOpenAporte = (assetId: string | null = null) => {
+    setSelectedAporteAssetId(assetId);
+    setIsAporteModalOpen(true);
+  };
+
+  const handleOpenDetail = (asset: InvestmentAsset) => {
+    setSelectedDetailAsset(asset);
+    setIsDetailModalOpen(true);
+  };
+
+  // Mantém os dados do ativo do modal de detalhes atualizados quando houver aportes ou mudanças
+  useEffect(() => {
+    if (selectedDetailAsset) {
+      const updated = investments.find(a => a.id === selectedDetailAsset.id);
+      if (updated) {
+        setSelectedDetailAsset(updated);
+      }
+    }
+  }, [investments]);
 
   // Moedas distintas presentes na carteira
   const distinctCurrencies = getDistinctCurrencies(investments);
@@ -158,6 +193,15 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
             </button>
 
             <button
+              onClick={() => handleOpenAporte(null)}
+              className="px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/40 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="Fazer um aporte (compra de mais cotas) na carteira"
+            >
+              <TrendingUp className="w-4 h-4 stroke-[2.5]" />
+              <span>Aporte</span>
+            </button>
+
+            <button
               onClick={onOpenNewInvestment}
               className="px-3.5 py-2 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
@@ -166,6 +210,45 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Cloud Sync & Device State Notice */}
+        {!currentUser && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-blue-950/40 border border-blue-800/60 text-xs animate-in fade-in">
+            <div className="flex items-center gap-2.5 text-blue-200">
+              <Cloud className="w-4 h-4 text-blue-400 shrink-0" />
+              <span>
+                <strong>Modo Local (Offline):</strong> Para sincronizar seus investimentos criados no celular e vê-los aqui na Web, entre com sua Conta Google.
+              </span>
+            </div>
+            <button
+              onClick={signInWithGoogle}
+              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Conectar Conta Google</span>
+            </button>
+          </div>
+        )}
+
+        {currentUser && (pendingSyncCount > 0 || syncStatus === 'error') && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-xs animate-in fade-in">
+            <div className="flex items-center gap-2.5 text-amber-200">
+              <CloudOff className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                {pendingSyncCount > 0
+                  ? `${pendingSyncCount} operação(ões) aguardando sincronização com a nuvem.`
+                  : syncError || 'Falha ao sincronizar com a nuvem.'}
+              </span>
+            </div>
+            <button
+              onClick={() => retrySync()}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold transition-colors shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Sincronizar Agora</span>
+            </button>
+          </div>
+        )}
 
         {/* Real-time sync timestamp status */}
         {lastQuotesUpdate && (
@@ -423,18 +506,21 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
             const { profitLoss: assetProfit, profitLossPercent: assetProfitPercent } = calculateUnrealizedProfit(asset);
             const hasChange = typeof asset.changePercent === 'number';
             const isPositiveChange = hasChange && (asset.changePercent || 0) >= 0;
+            const assetTxCount = investmentTransactions.filter(t => t.assetId === asset.id).length;
 
             return (
               <div
                 key={asset.id}
-                className="p-4 sm:p-5 rounded-2xl bg-slate-900/50 border border-slate-800 hover:border-slate-700/80 transition-all flex flex-col justify-between space-y-4 group"
+                onClick={() => handleOpenDetail(asset)}
+                className="p-4 sm:p-5 rounded-2xl bg-slate-900/50 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-900/80 transition-all flex flex-col justify-between space-y-4 group cursor-pointer shadow-xs hover:shadow-xl hover:shadow-emerald-950/20 active:scale-[0.995]"
+                title="Clique para abrir detalhes, extrato de compras e aportes"
               >
                 {/* Card Top: Ticker, Type Badge & Actions */}
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-black font-mono text-white tracking-tight">
+                        <span className="text-base font-black font-mono text-white tracking-tight group-hover:text-emerald-300 transition-colors">
                           {asset.ticker}
                         </span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.bg}`}>
@@ -496,40 +582,72 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Card Bottom: Rentabilidade & Buttons */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">Rentabilidade:</span>
-                    <div className={`text-xs font-mono font-bold ${assetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {assetProfit >= 0 ? '+' : ''}{formatCurrency(assetProfit, asset.currency, hideValues)} ({assetProfitPercent >= 0 ? '+' : ''}{assetProfitPercent.toFixed(2)}%)
+                {/* Card Bottom: Rentabilidade, Buttons & Statement Shortcut */}
+                <div className="space-y-2 pt-3 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Rentabilidade:</span>
+                      <div className={`text-xs font-mono font-bold ${assetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {assetProfit >= 0 ? '+' : ''}{formatCurrency(assetProfit, asset.currency, hideValues)} ({assetProfitPercent >= 0 ? '+' : ''}{assetProfitPercent.toFixed(2)}%)
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenAporte(asset.id);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
+                        title="Fazer aporte neste ativo"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Aporte</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenDetail(asset);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 bg-slate-800/80 hover:bg-blue-500/20 transition-all cursor-pointer"
+                        title="Ver extrato de compras e aportes"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditInvestment(asset);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all cursor-pointer"
+                        title="Editar ativo"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Deseja realmente remover o ativo ${asset.ticker} da sua carteira?`)) {
+                            deleteInvestment(asset.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 bg-slate-800/80 hover:bg-rose-500/20 transition-all cursor-pointer"
+                        title="Excluir ativo da carteira"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={() => {
-                        setSelectedTxAssetId(asset.id);
-                        setIsTxModalOpen(true);
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 bg-slate-800/80 hover:bg-blue-500/20 transition-all cursor-pointer"
-                      title="Operações / Histórico deste ativo"
-                    >
-                      <History className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => onEditInvestment(asset)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all cursor-pointer"
-                      title="Editar ativo"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => deleteInvestment(asset.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 bg-slate-800/80 hover:bg-rose-500/20 transition-all cursor-pointer"
-                      title="Excluir ativo da carteira"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  {/* Visual cue to open statement */}
+                  <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px] font-semibold text-emerald-400/90 group-hover:text-emerald-300 transition-colors">
+                    <span className="flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Extrato de Compras & Aportes ({assetTxCount > 0 ? `${assetTxCount} operação${assetTxCount > 1 ? 'ões' : ''}` : 'Cadastro'})</span>
+                    </span>
+                    <span className="text-slate-400 group-hover:text-emerald-300 group-hover:translate-x-0.5 transition-all text-[10px]">
+                      Ver compras &rarr;
+                    </span>
                   </div>
                 </div>
               </div>
@@ -543,6 +661,22 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
         isOpen={isTxModalOpen}
         onClose={() => setIsTxModalOpen(false)}
         initialAssetId={selectedTxAssetId}
+      />
+
+      {/* Investment Aporte Modal */}
+      <InvestmentDepositModal
+        isOpen={isAporteModalOpen}
+        onClose={() => setIsAporteModalOpen(false)}
+        initialAssetId={selectedAporteAssetId}
+      />
+
+      {/* Investment Detail Modal (Página / Aba de Compras & Aportes do Ativo) */}
+      <InvestmentDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        asset={selectedDetailAsset}
+        onOpenAporte={(assetId) => handleOpenAporte(assetId)}
+        onEditAsset={(asset) => onEditInvestment(asset)}
       />
     </div>
   );

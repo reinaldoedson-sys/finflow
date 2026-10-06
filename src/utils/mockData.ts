@@ -1,4 +1,4 @@
-import { Category, Account, CreditCard, Transaction, FinancialGoal, Budget, InstallmentPlan, GoalMovement, InvestmentAsset } from '../types/finance';
+import { Category, Account, CreditCard, Transaction, FinancialGoal, Budget, InstallmentPlan, GoalMovement, InvestmentAsset, InvestmentTransaction } from '../types/finance';
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat-salario', name: 'Salário & Renda', icon: 'Briefcase', color: '#10b981', type: 'income' },
@@ -367,6 +367,97 @@ export const INITIAL_INVESTMENTS: InvestmentAsset[] = [
     autoUpdate: false,
     lastPriceUpdate: new Date().toISOString(),
     notes: 'Reserva de liquidez rendendo 100% Selic',
+    createdAt: '2026-05-10T08:00:00Z'
+  }
+];
+
+export const INITIAL_INVESTMENT_TRANSACTIONS: InvestmentTransaction[] = [
+  {
+    id: 'tx-inv-petr4-1',
+    assetId: 'inv-petr4',
+    type: 'buy',
+    date: '2026-06-01',
+    quantity: 60,
+    price: 40.00,
+    totalAmount: 2400.00,
+    notes: 'Compra inicial na XP Investimentos',
+    createdAt: '2026-06-01T10:00:00Z'
+  },
+  {
+    id: 'tx-inv-petr4-2',
+    assetId: 'inv-petr4',
+    type: 'buy',
+    date: '2026-08-15',
+    quantity: 40,
+    price: 46.25,
+    totalAmount: 1850.00,
+    notes: 'Aporte mensal de oportunidade',
+    createdAt: '2026-08-15T14:20:00Z'
+  },
+  {
+    id: 'tx-inv-petr4-3',
+    assetId: 'inv-petr4',
+    type: 'dividend',
+    date: '2026-09-20',
+    quantity: 0,
+    price: 0,
+    totalAmount: 145.20,
+    notes: 'Dividendos creditados (JCP Petrobras)',
+    createdAt: '2026-09-20T11:00:00Z'
+  },
+  {
+    id: 'tx-inv-mxrf11-1',
+    assetId: 'inv-mxrf11',
+    type: 'buy',
+    date: '2026-07-15',
+    quantity: 200,
+    price: 9.75,
+    totalAmount: 1950.00,
+    notes: 'Compra inicial de cotas FII',
+    createdAt: '2026-07-15T14:30:00Z'
+  },
+  {
+    id: 'tx-inv-mxrf11-2',
+    assetId: 'inv-mxrf11',
+    type: 'buy',
+    date: '2026-09-10',
+    quantity: 100,
+    price: 9.90,
+    totalAmount: 990.00,
+    notes: 'Reinvestimento de proventos e aporte',
+    createdAt: '2026-09-10T16:00:00Z'
+  },
+  {
+    id: 'tx-inv-mxrf11-3',
+    assetId: 'inv-mxrf11',
+    type: 'dividend',
+    date: '2026-08-14',
+    quantity: 0,
+    price: 0,
+    totalAmount: 26.00,
+    notes: 'Rendimento mensal MXRF11 (R$ 0,13/cota)',
+    createdAt: '2026-08-14T12:00:00Z'
+  },
+  {
+    id: 'tx-inv-btc-1',
+    assetId: 'inv-btc',
+    type: 'buy',
+    date: '2026-08-01',
+    quantity: 0.045,
+    price: 380000.00,
+    totalAmount: 17100.00,
+    notes: 'Compra na Binance para reserva descentralizada',
+    createdAt: '2026-08-01T09:00:00Z'
+  },
+  {
+    id: 'tx-inv-tesouro-1',
+    assetId: 'inv-tesouro',
+    type: 'buy',
+    date: '2026-05-10',
+    quantity: 1,
+    price: 15400.00,
+    totalAmount: 15400.00,
+    notes: 'Aplicação Tesouro Selic 2029 via Nubank',
     createdAt: '2026-05-10T08:00:00Z'
   }
 ];

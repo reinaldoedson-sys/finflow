@@ -22,7 +22,8 @@ import {
   INITIAL_BUDGETS, 
   INITIAL_TRANSACTIONS,
   INITIAL_INSTALLMENT_PLANS,
-  INITIAL_INVESTMENTS
+  INITIAL_INVESTMENTS,
+  INITIAL_INVESTMENT_TRANSACTIONS
 } from '../utils/mockData';
 import { fetchMarketQuotes } from '../services/marketQuotes';
 import { getCurrentMonth, getPreviousMonth, getNextMonth } from '../utils/currency';
@@ -55,6 +56,7 @@ import {
   validateInvestmentTransaction, 
   calculateTransactionTotal 
 } from '../domain/investmentTransactions';
+import { calculateAportePosition } from '../domain/investments';
 import {
   SyncStatus,
   PendingSyncOperation,
@@ -108,6 +110,14 @@ interface FinanceContextType {
   addInvestmentTransaction: (tx: Omit<InvestmentTransaction, 'id' | 'createdAt'>) => Promise<string>;
   updateInvestmentTransaction: (id: string, updates: Partial<InvestmentTransaction>) => Promise<void>;
   deleteInvestmentTransaction: (id: string) => Promise<void>;
+  executeInvestmentAporte: (params: {
+    assetId: string;
+    quantity: number;
+    price: number;
+    date: string;
+    sourceAccountId?: string;
+    notes?: string;
+  }) => Promise<{ transactionId: string }>;
 
   // Installment Plan Actions
   addInstallmentPlan: (plan: Omit<InstallmentPlan, 'id' | 'createdAt'>) => Promise<void>;
@@ -263,7 +273,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     getInitialData('investments', INITIAL_INVESTMENTS)
   );
   const [investmentTransactions, setInvestmentTransactions] = useState<InvestmentTransaction[]>(() =>
-    getInitialData('investment_transactions', [])
+    getInitialData('investment_transactions', INITIAL_INVESTMENT_TRANSACTIONS)
   );
   const [isRefreshingQuotes, setIsRefreshingQuotes] = useState(false);
   const [lastQuotesUpdate, setLastQuotesUpdate] = useState<string | null>(null);
@@ -335,6 +345,23 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(investmentTransactions));
   }, [investmentTransactions]);
+
+  // Auto-process pending sync queue when user logs in or auth resolves
+  useEffect(() => {
+    if (!isAuthReady || !currentUser) return;
+    retrySync();
+  }, [currentUser, isAuthReady]);
+
+  // Auto-retry when device comes back online
+  useEffect(() => {
+    const handleOnline = () => {
+      if (currentUser) {
+        retrySync();
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [currentUser]);
 
   // Real-time Firestore Sync when user is authenticated
   useEffect(() => {
@@ -457,7 +484,24 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       collection(db, 'users', uid, 'investments'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InvestmentAsset));
-        setInvestments(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'investments', prev));
+        setInvestments(prev => {
+          if (list.length > 0) {
+            return mergeCloudWithPending(list, pendingQueueRef.current, 'investments', prev);
+          }
+          // Se a nuvem ainda não tem investimentos, mas o usuário possui ativos cadastrados localmente,
+          // preserva-os e sincroniza para a nuvem automaticamente (evita perda de dados entre mobile/web)
+          const customInvestments = prev.filter(inv => !INITIAL_INVESTMENTS.some(init => init.id === inv.id));
+          if (customInvestments.length > 0) {
+            customInvestments.forEach(inv => {
+              executeSync('investments', inv.id, 'set', {
+                ...inv,
+                userId: uid
+              });
+            });
+            return prev;
+          }
+          return mergeCloudWithPending(list, pendingQueueRef.current, 'investments', prev);
+        });
       },
       (error) => {
         console.warn('[FinFlow Sync] Erro ao escutar investimentos no Firestore:', error);
@@ -470,6 +514,19 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InvestmentTransaction));
         setInvestmentTransactions(prev => {
+          if (list.length > 0) {
+            const merged = mergeCloudWithPending(list, pendingQueueRef.current, 'investmentTransactions', prev);
+            return merged.sort((a, b) => b.date.localeCompare(a.date));
+          }
+          if (prev.length > 0) {
+            prev.forEach(itx => {
+              executeSync('investmentTransactions', itx.id, 'set', {
+                ...itx,
+                userId: uid
+              });
+            });
+            return prev;
+          }
           const merged = mergeCloudWithPending(list, pendingQueueRef.current, 'investmentTransactions', prev);
           return merged.sort((a, b) => b.date.localeCompare(a.date));
         });
@@ -661,8 +718,28 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   /**
+   * Remove valores undefined de objetos para evitar erros no Firestore
+   * ("Function setDoc() called with invalid data. Unsupported field value: undefined").
+   */
+  const sanitizePayload = (obj: any, isRoot = true): any => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+    const clean: any = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (isRoot && key === 'id') continue;
+      if (val !== undefined) {
+        if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+          clean[key] = sanitizePayload(val, false);
+        } else {
+          clean[key] = val;
+        }
+      }
+    }
+    return clean;
+  };
+
+  /**
    * Executa a sincronização de uma operação com o Firestore de forma segura e resiliente.
-   * Se a gravação falhar, a operação é salva na fila de pendências para retry futuro,
+   * Se a gravação falhar ou o usuário não estiver autenticado, a operação é salva na fila de pendências para retry,
    * garantindo que o FinFlow nunca silencie um erro nem perca a alteração local.
    */
   const executeSync = async (
@@ -671,14 +748,25 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     type: SyncOperationType,
     payload?: any
   ): Promise<boolean> => {
-    if (!currentUser) return true;
+    const clean = sanitizePayload(payload);
+
+    if (!currentUser) {
+      setPendingQueue(prev => enqueueOperation(prev, {
+        collection: collectionName,
+        docId,
+        type,
+        payload: clean,
+        lastError: 'Aguardando autenticação na conta Google'
+      }));
+      return true;
+    }
 
     try {
       const docRef = doc(db, 'users', currentUser.uid, collectionName, docId);
       if (type === 'set') {
-        await setDoc(docRef, payload);
+        await setDoc(docRef, clean);
       } else if (type === 'update') {
-        await setDoc(docRef, payload, { merge: true });
+        await setDoc(docRef, clean, { merge: true });
       } else if (type === 'delete') {
         await deleteDoc(docRef);
       }
@@ -700,7 +788,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         collection: collectionName,
         docId,
         type,
-        payload,
+        payload: clean,
         lastError: errMsg
       }));
       setSyncStatus('error');
@@ -729,10 +817,15 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     for (const op of currentQueue) {
       try {
         const docRef = doc(db, 'users', currentUser.uid, op.collection, op.docId);
+        const payloadWithUser = op.payload
+          ? { ...op.payload, userId: currentUser.uid }
+          : op.payload;
+        const clean = sanitizePayload(payloadWithUser);
+
         if (op.type === 'set') {
-          await setDoc(docRef, op.payload);
+          await setDoc(docRef, clean);
         } else if (op.type === 'update') {
-          await setDoc(docRef, op.payload, { merge: true });
+          await setDoc(docRef, clean, { merge: true });
         } else if (op.type === 'delete') {
           await deleteDoc(docRef);
         }
@@ -1436,12 +1529,26 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     setInvestments(prev => [...prev, newAsset]);
 
-    if (currentUser) {
-      await executeSync('investments', newId, 'set', {
-        ...newAsset,
-        userId: currentUser.uid
-      });
-    }
+    const syncPayload = {
+      id: newId,
+      ticker: newAsset.ticker,
+      name: newAsset.name,
+      type: newAsset.type,
+      quantity: newAsset.quantity,
+      averagePrice: newAsset.averagePrice,
+      currentPrice: newAsset.currentPrice,
+      currency: newAsset.currency,
+      autoUpdate: !!newAsset.autoUpdate,
+      ...(newAsset.previousClose !== undefined ? { previousClose: newAsset.previousClose } : {}),
+      ...(newAsset.changePercent !== undefined ? { changePercent: newAsset.changePercent } : {}),
+      ...(newAsset.institution ? { institution: newAsset.institution } : {}),
+      ...(newAsset.lastPriceUpdate ? { lastPriceUpdate: newAsset.lastPriceUpdate } : {}),
+      ...(newAsset.notes ? { notes: newAsset.notes } : {}),
+      userId: currentUser?.uid || '',
+      createdAt
+    };
+
+    await executeSync('investments', newId, 'set', syncPayload);
 
     if (newAsset.autoUpdate && newAsset.ticker) {
       setTimeout(() => {
@@ -1455,25 +1562,22 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const updateInvestment = async (id: string, updates: Partial<InvestmentAsset>) => {
     setInvestments(prev => prev.map(inv => inv.id === id ? { ...inv, ...updates } : inv));
 
-    if (currentUser) {
-      await executeSync('investments', id, 'update', {
-        ...updates,
-        userId: currentUser.uid
-      });
-    }
+    await executeSync('investments', id, 'update', {
+      ...updates,
+      userId: currentUser?.uid || ''
+    });
   };
 
   const deleteInvestment = async (id: string) => {
     setInvestments(prev => prev.filter(inv => inv.id !== id));
-
-    if (currentUser) {
-      await executeSync('investments', id, 'delete');
-    }
+    await executeSync('investments', id, 'delete');
   };
 
   const loadSampleInvestments = async () => {
     setInvestments(INITIAL_INVESTMENTS);
+    setInvestmentTransactions(INITIAL_INVESTMENT_TRANSACTIONS);
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(INITIAL_INVESTMENTS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(INITIAL_INVESTMENT_TRANSACTIONS));
     await refreshInvestmentQuotes();
   };
 
@@ -1489,12 +1593,20 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     setInvestmentTransactions(prev => [validatedTx, ...prev]);
 
-    if (currentUser) {
-      await executeSync('investmentTransactions', validatedTx.id, 'set', {
-        ...validatedTx,
-        userId: currentUser.uid
-      });
-    }
+    const syncTxPayload = {
+      id: validatedTx.id,
+      assetId: validatedTx.assetId,
+      type: validatedTx.type,
+      date: validatedTx.date,
+      quantity: validatedTx.quantity,
+      price: validatedTx.price,
+      totalAmount: validatedTx.totalAmount,
+      ...(validatedTx.notes ? { notes: validatedTx.notes } : {}),
+      userId: currentUser?.uid || '',
+      createdAt: validatedTx.createdAt
+    };
+
+    await executeSync('investmentTransactions', validatedTx.id, 'set', syncTxPayload);
 
     return validatedTx.id;
   };
@@ -1528,23 +1640,90 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     setInvestmentTransactions(prev => prev.map(t => t.id === id ? merged : t));
 
-    if (currentUser) {
-      await executeSync('investmentTransactions', id, 'update', {
-        ...updates,
-        ...(updates.totalAmount === undefined && (merged.type === 'buy' || merged.type === 'sell')
-          ? { totalAmount: merged.totalAmount }
-          : {}),
-        userId: currentUser.uid
-      });
-    }
+    await executeSync('investmentTransactions', id, 'update', {
+      ...updates,
+      ...(updates.totalAmount === undefined && (merged.type === 'buy' || merged.type === 'sell')
+        ? { totalAmount: merged.totalAmount }
+        : {}),
+      userId: currentUser?.uid || ''
+    });
   };
 
   const deleteInvestmentTransaction = async (id: string) => {
     setInvestmentTransactions(prev => prev.filter(t => t.id !== id));
+    await executeSync('investmentTransactions', id, 'delete');
+  };
 
-    if (currentUser) {
-      await executeSync('investmentTransactions', id, 'delete');
+  /**
+   * Executa um aporte financeiro em um ativo de investimento:
+   * 1. Registra a operação no ledger ('buy') com precisão de centavos
+   * 2. Recalcula e atualiza a quantidade e o preço médio ponderado do ativo
+   * 3. Opcionalmente debita o valor da conta financeira selecionada
+   */
+  const executeInvestmentAporte = async (params: {
+    assetId: string;
+    quantity: number;
+    price: number;
+    date: string;
+    sourceAccountId?: string;
+    notes?: string;
+  }): Promise<{ transactionId: string }> => {
+    const targetAsset = investments.find(a => a.id === params.assetId);
+    if (!targetAsset) {
+      throw new Error(`Ativo com ID "${params.assetId}" não encontrado na carteira.`);
     }
+
+    if (params.quantity <= 0) {
+      throw new Error('A quantidade do aporte deve ser maior que zero.');
+    }
+    if (params.price <= 0) {
+      throw new Error('O preço unitário do aporte deve ser maior que zero.');
+    }
+
+    const totalAmount = calculateTransactionTotal(params.quantity, params.price);
+
+    // 1. Registra no ledger de operações de investimentos
+    const txId = await addInvestmentTransaction({
+      assetId: params.assetId,
+      type: 'buy',
+      date: params.date,
+      quantity: params.quantity,
+      price: params.price,
+      totalAmount,
+      notes: params.notes?.trim() || `Aporte de ${params.quantity} cotas em ${targetAsset.ticker}`
+    });
+
+    // 2. Atualiza a posição (quantidade e preço médio ponderado) do ativo
+    const { newQuantity, newAveragePrice } = calculateAportePosition(
+      { quantity: targetAsset.quantity, averagePrice: targetAsset.averagePrice },
+      { quantity: params.quantity, price: params.price }
+    );
+
+    await updateInvestment(targetAsset.id, {
+      quantity: newQuantity,
+      averagePrice: newAveragePrice,
+      lastPriceUpdate: new Date().toISOString()
+    });
+
+    // 3. Se selecionou uma conta financeira para débito, gera a transação correspondente
+    if (params.sourceAccountId && params.sourceAccountId.trim().length > 0) {
+      const investCat = categories.find(c => 
+        c.id === 'cat-invest' || c.name.toLowerCase().includes('invest')
+      );
+      await addTransaction({
+        description: `Aporte - ${targetAsset.ticker} (${params.quantity} cotas)`,
+        amount: totalAmount,
+        type: 'expense',
+        accountId: params.sourceAccountId,
+        categoryId: investCat ? investCat.id : 'cat-outros',
+        paymentMethod: 'transfer',
+        date: params.date,
+        status: 'completed',
+        notes: `Aporte de ${params.quantity} cotas a ${params.price} em ${targetAsset.ticker}. Operação: ${txId}`
+      });
+    }
+
+    return { transactionId: txId };
   };
 
   // Backup & Restore
@@ -1635,7 +1814,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setInstallmentPlans(INITIAL_INSTALLMENT_PLANS);
     setTransactions(INITIAL_TRANSACTIONS);
     setInvestments(INITIAL_INVESTMENTS);
-    setInvestmentTransactions([]);
+    setInvestmentTransactions(INITIAL_INVESTMENT_TRANSACTIONS);
     setCurrencyState('BRL');
     setSelectedMonth(getCurrentMonth());
 
@@ -1768,6 +1947,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         addInvestmentTransaction,
         updateInvestmentTransaction,
         deleteInvestmentTransaction,
+        executeInvestmentAporte,
         addInstallmentPlan,
         deleteInstallmentPlan,
         addTransaction,

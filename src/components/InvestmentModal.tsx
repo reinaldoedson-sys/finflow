@@ -21,7 +21,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
   onClose,
   editAsset,
 }) => {
-  const { addInvestment, updateInvestment, currency } = useFinance();
+  const { addInvestment, updateInvestment, addInvestmentTransaction, currency } = useFinance();
 
   const [ticker, setTicker] = useState('');
   const [name, setName] = useState('');
@@ -154,7 +154,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
           notes: notes.trim() || undefined,
         });
       } else {
-        await addInvestment({
+        const newId = await addInvestment({
           ticker: cleanTicker,
           name: cleanName,
           type,
@@ -167,6 +167,23 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
           notes: notes.trim() || undefined,
           lastPriceUpdate: new Date().toISOString()
         });
+
+        // Registra automaticamente a compra inicial no ledger de transações
+        if (parsedQty > 0 && parsedAvgPrice > 0) {
+          try {
+            await addInvestmentTransaction({
+              assetId: newId,
+              type: 'buy',
+              date: new Date().toISOString().split('T')[0],
+              quantity: parsedQty,
+              price: parsedAvgPrice,
+              totalAmount: Math.round(parsedQty * parsedAvgPrice * 100) / 100,
+              notes: notes.trim() ? `Compra inicial: ${notes.trim()}` : 'Compra inicial de cadastro'
+            });
+          } catch (txErr) {
+            console.warn('Não foi possível registrar a compra inicial no ledger:', txErr);
+          }
+        }
       }
       onClose();
     } catch (err: any) {
