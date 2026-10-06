@@ -128,7 +128,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
               onClick={() => refreshInvestmentQuotes()}
               disabled={isRefreshingQuotes}
               className="px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700/80 border border-slate-700 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-              title="Atualizar cotações do mercado agora"
+              title="Atualizar cotações de mercado"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isRefreshingQuotes ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Atualizar Cotações</span>
@@ -356,7 +356,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
             </h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
               {investments.length === 0
-                ? 'Você pode carregar uma carteira de exemplo com ativos reais da B3 (PETR4), FIIs (MXRF11), Cripto (Bitcoin) e Tesouro Direto com cotações automáticas, ou cadastrar seus próprios ativos.'
+                ? 'Você pode carregar uma carteira de exemplo com ativos reais da B3 (PETR4), FIIs (MXRF11), Cripto (Bitcoin) e Tesouro Direto com cotações de mercado, ou cadastrar seus próprios ativos.'
                 : 'Não há ativos cadastrados com o filtro selecionado.'}
             </p>
           </div>

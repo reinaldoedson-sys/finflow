@@ -193,7 +193,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
                 {editAsset ? 'Editar Investimento' : 'Novo Ativo na Carteira'}
               </h2>
               <p className="text-[11px] text-slate-400">
-                Acompanhe rentabilidade, cotas e cotações ao vivo
+                Acompanhe rentabilidade, cotas e cotações atualizadas
               </p>
             </div>
           </div>
@@ -256,7 +256,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
                   type="button"
                   onClick={() => handleFetchLivePrice()}
                   disabled={!ticker || isFetchingPrice}
-                  title="Buscar cotação ao vivo agora"
+                  title="Buscar cotação atual"
                   className="absolute right-1 top-1 bottom-1 px-2 text-[10px] font-semibold rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition-colors flex items-center gap-1 disabled:opacity-40 cursor-pointer"
                 >
                   <RefreshCw className={`w-3 h-3 ${isFetchingPrice ? 'animate-spin' : ''}`} />

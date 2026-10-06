@@ -220,14 +220,40 @@ service cloud.firestore {
           && isValidId(investmentId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'currency', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'userId', 'createdAt'])
           && incoming().ticker is string && incoming().ticker.size() <= 32
-          && incoming().name is string && incoming().name.size() <= 80
+          && incoming().name is string && incoming().name.size() <= 120
+          && incoming().type in ['stock', 'fii', 'crypto', 'fixed_income', 'bdr_etf', 'other']
           && incoming().quantity is number && incoming().quantity >= 0
           && incoming().averagePrice is number && incoming().averagePrice >= 0
-          && incoming().currentPrice is number && incoming().currentPrice >= 0;
+          && incoming().currentPrice is number && incoming().currentPrice >= 0
+          && incoming().currency in ['BRL', 'USD']
+          && (!('previousClose' in incoming()) || (incoming().previousClose is number && incoming().previousClose >= 0))
+          && (!('changePercent' in incoming()) || incoming().changePercent is number)
+          && (!('autoUpdate' in incoming()) || incoming().autoUpdate is bool)
+          && (!('institution' in incoming()) || (incoming().institution is string && incoming().institution.size() <= 80))
+          && (!('notes' in incoming()) || (incoming().notes is string && incoming().notes.size() <= 500))
+          && (!('lastPriceUpdate' in incoming()) || (incoming().lastPriceUpdate is string && incoming().lastPriceUpdate.size() <= 64))
+          && incoming().createdAt is string && incoming().createdAt.size() <= 64;
         allow update: if isOwner(userId)
           && isValidId(investmentId)
-          && incoming().userId == userId;
+          && incoming().userId == userId
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().keys().hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'userId', 'createdAt'])
+          && incoming().ticker is string && incoming().ticker.size() <= 32
+          && incoming().name is string && incoming().name.size() <= 120
+          && incoming().type in ['stock', 'fii', 'crypto', 'fixed_income', 'bdr_etf', 'other']
+          && incoming().quantity is number && incoming().quantity >= 0
+          && incoming().averagePrice is number && incoming().averagePrice >= 0
+          && incoming().currentPrice is number && incoming().currentPrice >= 0
+          && incoming().currency in ['BRL', 'USD']
+          && (!('previousClose' in incoming()) || (incoming().previousClose is number && incoming().previousClose >= 0))
+          && (!('changePercent' in incoming()) || incoming().changePercent is number)
+          && (!('autoUpdate' in incoming()) || incoming().autoUpdate is bool)
+          && (!('institution' in incoming()) || (incoming().institution is string && incoming().institution.size() <= 80))
+          && (!('notes' in incoming()) || (incoming().notes is string && incoming().notes.size() <= 500))
+          && (!('lastPriceUpdate' in incoming()) || (incoming().lastPriceUpdate is string && incoming().lastPriceUpdate.size() <= 64));
       }
 
       // Subcollection: Transactions
