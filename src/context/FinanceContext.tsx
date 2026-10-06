@@ -10,7 +10,8 @@ import {
   GoalMovementType,
   CurrencyCode,
   InstallmentPlan,
-  InvestmentAsset 
+  InvestmentAsset,
+  InvestmentTransaction
 } from '../types/finance';
 import { 
   DEFAULT_CATEGORIES, 
@@ -49,6 +50,7 @@ import {
   MonthCommitment
 } from '../domain/calculations';
 import { calculateInstallmentSchedule } from '../domain/installments';
+import { createInvestmentTransaction } from '../domain/investmentTransactions';
 import {
   SyncStatus,
   PendingSyncOperation,
@@ -71,6 +73,7 @@ interface FinanceContextType {
   goalMovements: GoalMovement[];
   installmentPlans: InstallmentPlan[];
   investments: InvestmentAsset[];
+  investmentTransactions: InvestmentTransaction[];
   currency: CurrencyCode;
   selectedMonth: string;
   futureCommitments: MonthCommitment[];
@@ -96,6 +99,11 @@ interface FinanceContextType {
   loadSampleInvestments: () => Promise<void>;
   isRefreshingQuotes: boolean;
   lastQuotesUpdate: string | null;
+
+  // Investment Transaction Actions (Ledger de investimentos - Etapa 9)
+  addInvestmentTransaction: (tx: Omit<InvestmentTransaction, 'id' | 'createdAt'>) => Promise<string>;
+  updateInvestmentTransaction: (id: string, updates: Partial<InvestmentTransaction>) => Promise<void>;
+  deleteInvestmentTransaction: (id: string) => Promise<void>;
 
   // Installment Plan Actions
   addInstallmentPlan: (plan: Omit<InstallmentPlan, 'id' | 'createdAt'>) => Promise<void>;
@@ -250,6 +258,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [investments, setInvestments] = useState<InvestmentAsset[]>(() =>
     getInitialData('investments', INITIAL_INVESTMENTS)
   );
+  const [investmentTransactions, setInvestmentTransactions] = useState<InvestmentTransaction[]>(() =>
+    getInitialData('investment_transactions', [])
+  );
   const [isRefreshingQuotes, setIsRefreshingQuotes] = useState(false);
   const [lastQuotesUpdate, setLastQuotesUpdate] = useState<string | null>(null);
 
@@ -316,6 +327,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(investments));
   }, [investments]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(investmentTransactions));
+  }, [investmentTransactions]);
 
   // Real-time Firestore Sync when user is authenticated
   useEffect(() => {
@@ -445,6 +460,21 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
     );
 
+    // Listen to Investment Transactions (Ledger de investimentos - Etapa 9)
+    const unsubInvestmentTransactions = onSnapshot(
+      collection(db, 'users', uid, 'investmentTransactions'),
+      (snapshot) => {
+        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InvestmentTransaction));
+        setInvestmentTransactions(prev => {
+          const merged = mergeCloudWithPending(list, pendingQueueRef.current, 'investmentTransactions', prev);
+          return merged.sort((a, b) => b.date.localeCompare(a.date));
+        });
+      },
+      (error) => {
+        console.warn('[FinFlow Sync] Erro ao escutar transações de investimentos no Firestore:', error);
+      }
+    );
+
     return () => {
       unsubAccounts();
       unsubCards();
@@ -455,6 +485,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       unsubPlans();
       unsubTransactions();
       unsubInvestments();
+      unsubInvestmentTransactions();
     };
   }, [currentUser, isAuthReady]);
 
@@ -600,6 +631,22 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
           ...(inv.notes ? { notes: inv.notes } : {}),
           userId: uid,
           createdAt: inv.createdAt
+        });
+      }
+
+      // Seed investment transactions (Ledger de investimentos - Etapa 9)
+      for (const itx of investmentTransactions) {
+        const ref = doc(db, 'users', uid, 'investmentTransactions', itx.id);
+        batch.set(ref, {
+          assetId: itx.assetId,
+          type: itx.type,
+          date: itx.date,
+          quantity: itx.quantity,
+          price: itx.price,
+          totalAmount: itx.totalAmount,
+          ...(itx.notes ? { notes: itx.notes } : {}),
+          userId: uid,
+          createdAt: itx.createdAt
         });
       }
 
@@ -1426,6 +1473,54 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await refreshInvestmentQuotes();
   };
 
+  // Investment Transactions Actions (Ledger de investimentos - Etapa 9)
+  const addInvestmentTransaction = async (tx: Omit<InvestmentTransaction, 'id' | 'createdAt'>): Promise<string> => {
+    // Integridade referencial: o ativo deve existir na carteira
+    const assetExists = investments.some(a => a.id === tx.assetId);
+    if (!assetExists) {
+      throw new Error(`Ativo de investimento com ID "${tx.assetId}" não encontrado na carteira.`);
+    }
+
+    const validatedTx = createInvestmentTransaction(tx, investments);
+
+    setInvestmentTransactions(prev => [validatedTx, ...prev]);
+
+    if (currentUser) {
+      await executeSync('investmentTransactions', validatedTx.id, 'set', {
+        ...validatedTx,
+        userId: currentUser.uid
+      });
+    }
+
+    return validatedTx.id;
+  };
+
+  const updateInvestmentTransaction = async (id: string, updates: Partial<InvestmentTransaction>) => {
+    if (updates.assetId) {
+      const assetExists = investments.some(a => a.id === updates.assetId);
+      if (!assetExists) {
+        throw new Error(`Ativo de investimento com ID "${updates.assetId}" não encontrado na carteira.`);
+      }
+    }
+
+    setInvestmentTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+
+    if (currentUser) {
+      await executeSync('investmentTransactions', id, 'update', {
+        ...updates,
+        userId: currentUser.uid
+      });
+    }
+  };
+
+  const deleteInvestmentTransaction = async (id: string) => {
+    setInvestmentTransactions(prev => prev.filter(t => t.id !== id));
+
+    if (currentUser) {
+      await executeSync('investmentTransactions', id, 'delete');
+    }
+  };
+
   // Backup & Restore
   const exportData = async (passphrase?: string): Promise<string> => {
     const backupPayload = {
@@ -1440,7 +1535,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       goalMovements,
       installmentPlans,
       transactions,
-      investments
+      investments,
+      investmentTransactions
     };
 
     const jsonString = JSON.stringify(backupPayload, null, 2);
@@ -1486,6 +1582,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (payload.installmentPlans) setInstallmentPlans(payload.installmentPlans);
       if (payload.transactions) setTransactions(payload.transactions);
       if (payload.investments) setInvestments(payload.investments);
+      if (payload.investmentTransactions) setInvestmentTransactions(payload.investmentTransactions);
       if (payload.currency) setCurrencyState(payload.currency);
 
       if (currentUser) {
@@ -1512,6 +1609,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setInstallmentPlans(INITIAL_INSTALLMENT_PLANS);
     setTransactions(INITIAL_TRANSACTIONS);
     setInvestments(INITIAL_INVESTMENTS);
+    setInvestmentTransactions([]);
     setCurrencyState('BRL');
     setSelectedMonth(getCurrentMonth());
 
@@ -1532,6 +1630,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify([]));
 
     setAccounts([]);
     setCreditCards([]);
@@ -1541,10 +1640,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setInstallmentPlans([]);
     setTransactions([]);
     setInvestments([]);
+    setInvestmentTransactions([]);
 
     if (currentUser) {
       const uid = currentUser.uid;
-      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans', 'investments'];
+      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans', 'investments', 'investmentTransactions'];
       for (const sub of subcollections) {
         try {
           const snap = await getDocs(collection(db, 'users', uid, sub));
@@ -1613,6 +1713,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         goalMovements,
         installmentPlans,
         investments,
+        investmentTransactions,
         currency,
         selectedMonth,
         futureCommitments,
@@ -1636,6 +1737,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         loadSampleInvestments,
         isRefreshingQuotes,
         lastQuotesUpdate,
+        addInvestmentTransaction,
+        updateInvestmentTransaction,
+        deleteInvestmentTransaction,
         addInstallmentPlan,
         deleteInstallmentPlan,
         addTransaction,

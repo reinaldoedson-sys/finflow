@@ -19,8 +19,10 @@ import {
   Landmark, 
   Coins, 
   LineChart,
-  Info
+  Info,
+  History
 } from 'lucide-react';
+import { InvestmentTransactionModal } from '../components/InvestmentTransactionModal';
 import {
   calculateInvestmentCost,
   calculateInvestmentValue,
@@ -55,6 +57,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
 }) => {
   const { 
     investments, 
+    investmentTransactions,
     deleteInvestment, 
     refreshInvestmentQuotes, 
     loadSampleInvestments,
@@ -64,6 +67,8 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
   const { hideValues } = useSecurity();
 
   const [selectedFilter, setSelectedFilter] = useState<'all' | AssetClass>('all');
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const [selectedTxAssetId, setSelectedTxAssetId] = useState<string | null>(null);
 
   // Moedas distintas presentes na carteira
   const distinctCurrencies = getDistinctCurrencies(investments);
@@ -124,6 +129,23 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => {
+                setSelectedTxAssetId(null);
+                setIsTxModalOpen(true);
+              }}
+              className="px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700/80 border border-slate-700 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Histórico de operações e movimentações"
+            >
+              <History className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">Operações</span>
+              {investmentTransactions.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-mono font-bold">
+                  {investmentTransactions.length}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={() => refreshInvestmentQuotes()}
               disabled={isRefreshingQuotes}
@@ -485,6 +507,16 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
+                      onClick={() => {
+                        setSelectedTxAssetId(asset.id);
+                        setIsTxModalOpen(true);
+                      }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 bg-slate-800/80 hover:bg-blue-500/20 transition-all cursor-pointer"
+                      title="Operações / Histórico deste ativo"
+                    >
+                      <History className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => onEditInvestment(asset)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all cursor-pointer"
                       title="Editar ativo"
@@ -505,6 +537,13 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
           })}
         </div>
       )}
+
+      {/* Investment Transactions Ledger Modal */}
+      <InvestmentTransactionModal
+        isOpen={isTxModalOpen}
+        onClose={() => setIsTxModalOpen(false)}
+        initialAssetId={selectedTxAssetId}
+      />
     </div>
   );
 };

@@ -151,6 +151,23 @@
         "createdAt": { "type": "string", "maxLength": 64, "description": "Creation timestamp" }
       },
       "required": ["ticker", "name", "type", "quantity", "averagePrice", "currentPrice", "currency", "userId", "createdAt"]
+    },
+    "InvestmentTransaction": {
+      "title": "InvestmentTransaction",
+      "description": "Investment buy, sell, or dividend transaction ledger entry.",
+      "type": "object",
+      "properties": {
+        "assetId": { "type": "string", "maxLength": 128, "description": "Linked InvestmentAsset ID" },
+        "type": { "type": "string", "enum": ["buy", "sell", "dividend"], "description": "Transaction operation type" },
+        "date": { "type": "string", "maxLength": 10, "description": "Operation date YYYY-MM-DD" },
+        "quantity": { "type": "number", "description": "Units bought or sold (0 for dividend)" },
+        "price": { "type": "number", "description": "Price per unit at execution" },
+        "totalAmount": { "type": "number", "description": "Total operation monetary value" },
+        "notes": { "type": "string", "maxLength": 500, "description": "Optional notes or memorandum" },
+        "userId": { "type": "string", "maxLength": 128, "description": "Owner user UID" },
+        "createdAt": { "type": "string", "maxLength": 64, "description": "Creation timestamp" }
+      },
+      "required": ["assetId", "type", "date", "quantity", "price", "totalAmount", "userId", "createdAt"]
     }
   },
   "firestore": {
@@ -189,6 +206,10 @@
     "/users/{userId}/investments/{investmentId}": {
       "schema": "InvestmentAsset",
       "description": "User investment assets and market holdings"
+    },
+    "/users/{userId}/investmentTransactions/{transactionId}": {
+      "schema": "InvestmentTransaction",
+      "description": "User investment transaction operations (buy, sell, dividend)"
     }
   }
 }

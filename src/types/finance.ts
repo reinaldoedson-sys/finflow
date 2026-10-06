@@ -131,10 +131,12 @@ export interface InvestmentAsset {
   createdAt: string;
 }
 
+export type InvestmentTransactionType = 'buy' | 'sell' | 'dividend';
+
 export interface InvestmentTransaction {
   id: string;
   assetId: string;
-  type: 'buy' | 'sell' | 'dividend';
+  type: InvestmentTransactionType;
   date: string;                // YYYY-MM-DD
   quantity: number;
   price: number;
