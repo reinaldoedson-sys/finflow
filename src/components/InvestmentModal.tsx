@@ -3,6 +3,11 @@ import { useFinance } from '../context/FinanceContext';
 import { InvestmentAsset, AssetClass } from '../types/finance';
 import { POPULAR_TICKERS, fetchMarketQuotes } from '../services/marketQuotes';
 import { formatCurrency } from '../utils/currency';
+import { 
+  calculateInvestmentCost, 
+  calculateInvestmentValue, 
+  calculateUnrealizedProfit 
+} from '../domain/investments';
 import { X, TrendingUp, Sparkles, RefreshCw, AlertCircle, Building2, Check } from 'lucide-react';
 
 interface InvestmentModalProps {
@@ -25,6 +30,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
   const [averagePrice, setAveragePrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
   const [institution, setInstitution] = useState('');
+  const [assetCurrency, setAssetCurrency] = useState<'BRL' | 'USD'>('BRL');
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [notes, setNotes] = useState('');
   const [isFetchingPrice, setIsFetchingPrice] = useState(false);
@@ -40,6 +46,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
       setAveragePrice(editAsset.averagePrice.toString());
       setCurrentPrice(editAsset.currentPrice.toString());
       setInstitution(editAsset.institution || '');
+      setAssetCurrency(editAsset.currency || 'BRL');
       setAutoUpdate(editAsset.autoUpdate);
       setNotes(editAsset.notes || '');
     } else {
@@ -50,6 +57,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
       setAveragePrice('');
       setCurrentPrice('');
       setInstitution('');
+      setAssetCurrency('BRL');
       setAutoUpdate(true);
       setNotes('');
     }
@@ -87,7 +95,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
         }
         setPriceFetchedSuccess(true);
       } else {
-        setError('Não foi possível obter a cotação em tempo real deste código. Você pode digitar o preço manualmente.');
+        setError('Não foi possível obter a cotação de mercado deste código. Você pode digitar o preço manualmente.');
       }
     } catch {
       setError('Falha na consulta da cotação. Você pode preencher o valor atual manualmente.');
@@ -100,10 +108,14 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
   const parsedAvgPrice = parseFloat(averagePrice) || 0;
   const parsedCurrentPrice = parseFloat(currentPrice) || parsedAvgPrice;
 
-  const totalCost = parsedQty * parsedAvgPrice;
-  const currentValue = parsedQty * parsedCurrentPrice;
-  const profitLoss = currentValue - totalCost;
-  const profitLossPercent = totalCost > 0 ? (profitLoss / totalCost) * 100 : 0;
+  // Cálculos financeiros via funções puras do domínio
+  const totalCost = calculateInvestmentCost({ quantity: parsedQty, averagePrice: parsedAvgPrice });
+  const currentValue = calculateInvestmentValue({ quantity: parsedQty, currentPrice: parsedCurrentPrice });
+  const { profitLoss, profitLossPercent } = calculateUnrealizedProfit({
+    quantity: parsedQty,
+    averagePrice: parsedAvgPrice,
+    currentPrice: parsedCurrentPrice
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,6 +148,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
           quantity: parsedQty,
           averagePrice: parsedAvgPrice,
           currentPrice: parsedCurrentPrice,
+          currency: assetCurrency,
           institution: institution.trim() || undefined,
           autoUpdate,
           notes: notes.trim() || undefined,
@@ -148,7 +161,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
           quantity: parsedQty,
           averagePrice: parsedAvgPrice,
           currentPrice: parsedCurrentPrice,
-          currency: 'BRL',
+          currency: assetCurrency,
           institution: institution.trim() || undefined,
           autoUpdate,
           notes: notes.trim() || undefined,
@@ -266,8 +279,8 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
             </div>
           </div>
 
-          {/* Type & Institution */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Type, Currency & Institution */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Classe do Ativo
@@ -283,6 +296,20 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
                 <option value="crypto">Criptomoedas</option>
                 <option value="fixed_income">Renda Fixa / Tesouro / CDB</option>
                 <option value="other">Outros Investimentos</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Moeda do Ativo
+              </label>
+              <select
+                value={assetCurrency}
+                onChange={(e) => setAssetCurrency(e.target.value as 'BRL' | 'USD')}
+                className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/80 rounded-lg text-xs font-mono font-bold text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+              >
+                <option value="BRL">BRL (R$ - Brasil)</option>
+                <option value="USD">USD (US$ - Dólar)</option>
               </select>
             </div>
 
@@ -320,7 +347,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Preço Médio (R$) <span className="text-emerald-400">*</span>
+                Preço Médio ({assetCurrency}) <span className="text-emerald-400">*</span>
               </label>
               <input
                 type="number"
@@ -336,10 +363,10 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                <span>Preço Atual (R$)</span>
+                <span>Preço Atual ({assetCurrency})</span>
                 {priceFetchedSuccess && (
                   <span className="text-[10px] text-emerald-400 font-normal flex items-center gap-0.5">
-                    <Check className="w-2.5 h-2.5" /> Ao vivo
+                    <Check className="w-2.5 h-2.5" /> Mercado
                   </span>
                 )}
               </label>
@@ -360,7 +387,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
             <div>
               <div className="text-xs font-bold text-white">Atualização Automática de Cotação</div>
               <div className="text-[11px] text-slate-400">
-                O FinFlow atualizará o preço automaticamente ao vivo no mercado financeiro.
+                O FinFlow atualizará o preço com base em cotações atualizadas de mercado.
               </div>
             </div>
             <input
@@ -375,21 +402,21 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
           {parsedQty > 0 && parsedAvgPrice > 0 && (
             <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-800 space-y-2">
               <div className="text-[11px] uppercase font-bold text-slate-400 tracking-wider">
-                Simulação da Posição
+                Simulação da Posição ({assetCurrency})
               </div>
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>
                   <span className="text-slate-400 text-[10px] block">Total Aplicado:</span>
-                  <strong className="text-slate-200 font-mono">{formatCurrency(totalCost, currency)}</strong>
+                  <strong className="text-slate-200 font-mono">{formatCurrency(totalCost, assetCurrency)}</strong>
                 </div>
                 <div>
                   <span className="text-slate-400 text-[10px] block">Valor Atual:</span>
-                  <strong className="text-white font-mono">{formatCurrency(currentValue, currency)}</strong>
+                  <strong className="text-white font-mono">{formatCurrency(currentValue, assetCurrency)}</strong>
                 </div>
                 <div>
                   <span className="text-slate-400 text-[10px] block">Rentabilidade:</span>
                   <strong className={`font-mono ${profitLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {profitLoss >= 0 ? '+' : ''}{formatCurrency(profitLoss, currency)} ({profitLossPercent >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%)
+                    {profitLoss >= 0 ? '+' : ''}{formatCurrency(profitLoss, assetCurrency)} ({profitLossPercent >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%)
                   </strong>
                 </div>
               </div>

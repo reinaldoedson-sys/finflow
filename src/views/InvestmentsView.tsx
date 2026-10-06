@@ -15,13 +15,25 @@ import {
   Trash2, 
   Building2, 
   Sparkles,
-  ShieldCheck,
-  Clock,
-  Landmark,
-  Coins,
+  Clock, 
+  Landmark, 
+  Coins, 
   LineChart,
-  HelpCircle
+  Info
 } from 'lucide-react';
+import {
+  calculateInvestmentCost,
+  calculateInvestmentValue,
+  calculateUnrealizedProfit,
+  calculatePortfolioValue,
+  calculatePortfolioCost,
+  calculatePortfolioProfit,
+  calculatePortfolioAllocation,
+  calculateDailyVariation,
+  getDistinctCurrencies,
+  getPortfolioSummaryByCurrency,
+  SupportedInvestmentCurrency
+} from '../domain/investments';
 
 interface InvestmentsViewProps {
   onOpenNewInvestment: () => void;
@@ -43,7 +55,6 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
 }) => {
   const { 
     investments, 
-    currency, 
     deleteInvestment, 
     refreshInvestmentQuotes, 
     loadSampleInvestments,
@@ -54,41 +65,41 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
 
   const [selectedFilter, setSelectedFilter] = useState<'all' | AssetClass>('all');
 
-  // Compute portfolio metrics
-  const totalInvestedCost = investments.reduce((sum, a) => sum + (a.quantity * a.averagePrice), 0);
-  const totalCurrentValue = investments.reduce((sum, a) => sum + (a.quantity * a.currentPrice), 0);
-  const totalProfitLoss = totalCurrentValue - totalInvestedCost;
-  const totalProfitLossPercent = totalInvestedCost > 0 ? (totalProfitLoss / totalInvestedCost) * 100 : 0;
+  // Moedas distintas presentes na carteira
+  const distinctCurrencies = getDistinctCurrencies(investments);
+  const hasMultipleCurrencies = distinctCurrencies.length > 1;
 
-  // Day variation
-  const totalDailyVariation = investments.reduce((sum, a) => {
-    if (typeof a.previousClose === 'number' && a.previousClose > 0) {
-      const diff = (a.currentPrice - a.previousClose) * a.quantity;
-      return sum + diff;
-    }
-    return sum;
-  }, 0);
-  const dailyVariationPercent = totalCurrentValue > 0 ? (totalDailyVariation / (totalCurrentValue - totalDailyVariation || totalCurrentValue)) * 100 : 0;
+  // Moeda ativa selecionada para visualização (segrega BRL e USD)
+  const [selectedCurrency, setSelectedCurrency] = useState<SupportedInvestmentCurrency>('BRL');
+  const activeCurrency: SupportedInvestmentCurrency = distinctCurrencies.length > 0
+    ? (distinctCurrencies.includes(selectedCurrency) ? selectedCurrency : distinctCurrencies[0])
+    : 'BRL';
 
-  // Asset class allocation breakdown
-  const classBreakdown = (['stock', 'fii', 'fixed_income', 'crypto', 'bdr_etf', 'other'] as AssetClass[]).map(type => {
-    const assets = investments.filter(a => a.type === type);
-    const value = assets.reduce((sum, a) => sum + (a.quantity * a.currentPrice), 0);
-    const percent = totalCurrentValue > 0 ? (value / totalCurrentValue) * 100 : 0;
-    return {
-      type,
-      label: ASSET_TYPE_LABELS[type].label,
-      color: ASSET_TYPE_LABELS[type].color,
-      value,
-      percent,
-      count: assets.length
-    };
-  }).filter(c => c.value > 0);
+  // Resumo consolidado puro segregado por moeda
+  const currencySummaries = getPortfolioSummaryByCurrency(investments);
 
-  // Filtered list
+  // Ativos pertencentes à moeda ativa
+  const activeCurrencyAssets = investments.filter(a => a.currency === activeCurrency);
+
+  // Métricas financeiras puras da carteira ativa
+  const totalInvestedCost = calculatePortfolioCost(activeCurrencyAssets, activeCurrency);
+  const totalCurrentValue = calculatePortfolioValue(activeCurrencyAssets, activeCurrency);
+  const { profitLoss: totalProfitLoss, profitLossPercent: totalProfitLossPercent } = calculatePortfolioProfit(
+    activeCurrencyAssets,
+    activeCurrency
+  );
+  const { variationAmount: totalDailyVariation, variationPercent: dailyVariationPercent } = calculateDailyVariation(
+    activeCurrencyAssets,
+    activeCurrency
+  );
+
+  // Alocação pura da carteira na moeda ativa
+  const allocationItems = calculatePortfolioAllocation(activeCurrencyAssets, activeCurrency);
+
+  // Lista filtrada por classe dentro da moeda ativa
   const filteredAssets = selectedFilter === 'all' 
-    ? investments 
-    : investments.filter(a => a.type === selectedFilter);
+    ? activeCurrencyAssets 
+    : activeCurrencyAssets.filter(a => a.type === selectedFilter);
 
   return (
     <div className="space-y-6">
@@ -100,15 +111,15 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
               <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
                 Mercado & Carteira
               </span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold">
-                Ao Vivo
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold">
+                Mercado
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
               Investimentos & Ativos
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Cotações automáticas da B3, FIIs, Cripto e Renda Fixa em tempo real
+              Cotações atualizadas de mercado
             </p>
           </div>
 
@@ -142,19 +153,68 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
           </div>
         )}
 
+        {/* Segregação por Moeda (Quando houver ativos em moedas diferentes) */}
+        {hasMultipleCurrencies && (
+          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+            <div className="flex items-center gap-2 text-xs text-amber-300/90 font-medium">
+              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Moedas segregadas: posições em BRL e USD são calculadas separadamente sem conversão cambial fictícia.</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(['BRL', 'USD'] as SupportedInvestmentCurrency[]).map(curr => {
+                const s = currencySummaries[curr];
+                if (s.assetsCount === 0) return null;
+                const isSelected = activeCurrency === curr;
+                return (
+                  <button
+                    key={curr}
+                    type="button"
+                    onClick={() => setSelectedCurrency(curr)}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-500/10 border-emerald-500/50 ring-1 ring-emerald-500/40'
+                        : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                      <span className="font-bold text-white uppercase font-mono">
+                        Carteira {curr}
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                        isSelected ? 'bg-emerald-400 text-slate-950' : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {isSelected ? 'Ativa' : 'Visualizar'}
+                      </span>
+                    </div>
+                    <div className="text-lg font-black font-mono text-white">
+                      {formatCurrency(s.totalValue, curr, hideValues)}
+                    </div>
+                    <div className="text-[11px] flex items-center justify-between gap-2 mt-1 text-slate-400">
+                      <span>Custo: {formatCurrency(s.totalCost, curr, hideValues)}</span>
+                      <span className={`font-mono font-semibold ${s.profitLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {s.profitLoss >= 0 ? '+' : ''}{formatCurrency(s.profitLoss, curr, hideValues)} ({s.profitLossPercent >= 0 ? '+' : ''}{s.profitLossPercent.toFixed(2)}%)
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Portfolio KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-1">
           {/* Card 1: Patrimônio Atual */}
           <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/40 border border-slate-800/90">
             <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
               <Landmark className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Patrimônio Investido</span>
+              <span>Patrimônio ({activeCurrency})</span>
             </div>
             <div className="text-base sm:text-xl font-black font-mono text-white">
-              {formatCurrency(totalCurrentValue, currency, hideValues)}
+              {formatCurrency(totalCurrentValue, activeCurrency, hideValues)}
             </div>
             <span className="text-[10px] text-slate-500 block mt-0.5">
-              {investments.length} ativo{investments.length !== 1 ? 's' : ''} em carteira
+              {activeCurrencyAssets.length} ativo{activeCurrencyAssets.length !== 1 ? 's' : ''} em carteira
             </span>
           </div>
 
@@ -165,7 +225,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
               <span>Total Aplicado</span>
             </div>
             <div className="text-base sm:text-xl font-bold font-mono text-slate-200">
-              {formatCurrency(totalInvestedCost, currency, hideValues)}
+              {formatCurrency(totalInvestedCost, activeCurrency, hideValues)}
             </div>
             <span className="text-[10px] text-slate-500 block mt-0.5">
               Custo médio de aquisição
@@ -183,7 +243,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
               <span>Rentabilidade Total</span>
             </div>
             <div className={`text-base sm:text-xl font-black font-mono ${totalProfitLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {totalProfitLoss >= 0 ? '+' : ''}{formatCurrency(totalProfitLoss, currency, hideValues)}
+              {totalProfitLoss >= 0 ? '+' : ''}{formatCurrency(totalProfitLoss, activeCurrency, hideValues)}
             </div>
             <span className={`text-[10px] font-mono font-semibold block mt-0.5 ${totalProfitLossPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {totalProfitLossPercent >= 0 ? '+' : ''}{totalProfitLossPercent.toFixed(2)}% acumulado
@@ -201,7 +261,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
               <span>Oscilação do Dia</span>
             </div>
             <div className={`text-base sm:text-xl font-bold font-mono ${totalDailyVariation >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {totalDailyVariation >= 0 ? '+' : ''}{formatCurrency(totalDailyVariation, currency, hideValues)}
+              {totalDailyVariation >= 0 ? '+' : ''}{formatCurrency(totalDailyVariation, activeCurrency, hideValues)}
             </div>
             <span className={`text-[10px] font-mono font-semibold block mt-0.5 ${dailyVariationPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {dailyVariationPercent >= 0 ? '+' : ''}{dailyVariationPercent.toFixed(2)}% hoje
@@ -210,34 +270,34 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
         </div>
 
         {/* Asset Allocation Progress Bar */}
-        {classBreakdown.length > 0 && (
+        {allocationItems.length > 0 && (
           <div className="space-y-2 pt-2 border-t border-slate-800/80">
             <div className="flex items-center justify-between text-xs text-slate-300">
               <span className="font-semibold flex items-center gap-1.5">
                 <PieChart className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Diversificação da Carteira</span>
+                <span>Diversificação da Carteira {hasMultipleCurrencies ? `(${activeCurrency})` : ''}</span>
               </span>
               <span className="text-[11px] text-slate-400 font-mono">
-                {classBreakdown.length} classes de ativos
+                {allocationItems.length} classes de ativos
               </span>
             </div>
 
             <div className="w-full h-3 rounded-full bg-slate-800 overflow-hidden flex">
-              {classBreakdown.map((item) => (
+              {allocationItems.map((item) => (
                 <div
                   key={item.type}
-                  title={`${item.label}: ${item.percent.toFixed(1)}%`}
-                  style={{ width: `${item.percent}%`, backgroundColor: item.color }}
+                  title={`${ASSET_TYPE_LABELS[item.type]?.label || item.type}: ${item.percent.toFixed(1)}%`}
+                  style={{ width: `${item.percent}%`, backgroundColor: ASSET_TYPE_LABELS[item.type]?.color || '#10b981' }}
                   className="h-full transition-all hover:opacity-80"
                 />
               ))}
             </div>
 
             <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px]">
-              {classBreakdown.map((item) => (
+              {allocationItems.map((item) => (
                 <div key={item.type} className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                  <span className="text-slate-300">{item.label}</span>
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ASSET_TYPE_LABELS[item.type]?.color || '#10b981' }} />
+                  <span className="text-slate-300">{ASSET_TYPE_LABELS[item.type]?.label || item.type}</span>
                   <span className="font-mono text-slate-400 font-semibold">{item.percent.toFixed(1)}%</span>
                 </div>
               ))}
@@ -256,11 +316,11 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
               : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
           }`}
         >
-          Todos ({investments.length})
+          Todos ({activeCurrencyAssets.length})
         </button>
 
         {(['stock', 'fii', 'fixed_income', 'crypto', 'bdr_etf', 'other'] as AssetClass[]).map((type) => {
-          const count = investments.filter(a => a.type === type).length;
+          const count = activeCurrencyAssets.filter(a => a.type === type).length;
           if (count === 0 && selectedFilter !== type) return null;
           const meta = ASSET_TYPE_LABELS[type];
           const isSelected = selectedFilter === type;
@@ -288,7 +348,11 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
           </div>
           <div>
             <h3 className="text-base font-bold text-white">
-              {investments.length === 0 ? 'Sua carteira de investimentos está vazia' : 'Nenhum ativo nesta categoria'}
+              {investments.length === 0 
+                ? 'Sua carteira de investimentos está vazia' 
+                : activeCurrencyAssets.length === 0 
+                  ? `Nenhum ativo cadastrado na moeda ${activeCurrency}` 
+                  : 'Nenhum ativo nesta categoria'}
             </h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
               {investments.length === 0
@@ -318,12 +382,12 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Adicionar Novo Ativo</span>
             </button>
-            {selectedFilter !== 'all' && investments.length > 0 && (
+            {selectedFilter !== 'all' && activeCurrencyAssets.length > 0 && (
               <button
                 onClick={() => setSelectedFilter('all')}
                 className="px-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
               >
-                Ver Todos os Ativos
+                Ver Todos os Ativos ({activeCurrency})
               </button>
             )}
           </div>
@@ -332,10 +396,9 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredAssets.map((asset) => {
             const meta = ASSET_TYPE_LABELS[asset.type] || ASSET_TYPE_LABELS.other;
-            const assetCost = asset.quantity * asset.averagePrice;
-            const assetValue = asset.quantity * asset.currentPrice;
-            const assetProfit = assetValue - assetCost;
-            const assetProfitPercent = assetCost > 0 ? (assetProfit / assetCost) * 100 : 0;
+            const assetCost = calculateInvestmentCost(asset);
+            const assetValue = calculateInvestmentValue(asset);
+            const { profitLoss: assetProfit, profitLossPercent: assetProfitPercent } = calculateUnrealizedProfit(asset);
             const hasChange = typeof asset.changePercent === 'number';
             const isPositiveChange = hasChange && (asset.changePercent || 0) >= 0;
 
@@ -355,8 +418,13 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.bg}`}>
                           {meta.label}
                         </span>
+                        {hasMultipleCurrencies && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700">
+                            {asset.currency}
+                          </span>
+                        )}
                         {asset.autoUpdate && (
-                          <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded" title="Cotação ao vivo via mercado">
+                          <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded" title="Cotação atualizada de mercado">
                             Online
                           </span>
                         )}
@@ -393,15 +461,15 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
                     </div>
                     <div>
                       <span className="text-slate-500 text-[10px] block">Preço Médio:</span>
-                      <strong className="text-slate-300 font-mono">{formatCurrency(asset.averagePrice, currency, hideValues)}</strong>
+                      <strong className="text-slate-300 font-mono">{formatCurrency(asset.averagePrice, asset.currency, hideValues)}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[10px] block">Cotação Atual:</span>
-                      <strong className="text-emerald-400 font-mono font-bold">{formatCurrency(asset.currentPrice, currency, hideValues)}</strong>
+                      <strong className="text-emerald-400 font-mono font-bold">{formatCurrency(asset.currentPrice, asset.currency, hideValues)}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[10px] block">Posição Total:</span>
-                      <strong className="text-white font-mono font-black">{formatCurrency(assetValue, currency, hideValues)}</strong>
+                      <strong className="text-white font-mono font-black">{formatCurrency(assetValue, asset.currency, hideValues)}</strong>
                     </div>
                   </div>
                 </div>
@@ -411,26 +479,22 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
                   <div>
                     <span className="text-[10px] text-slate-500 block">Rentabilidade:</span>
                     <div className={`text-xs font-mono font-bold ${assetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {assetProfit >= 0 ? '+' : ''}{formatCurrency(assetProfit, currency, hideValues)} ({assetProfitPercent >= 0 ? '+' : ''}{assetProfitPercent.toFixed(2)}%)
+                      {assetProfit >= 0 ? '+' : ''}{formatCurrency(assetProfit, asset.currency, hideValues)} ({assetProfitPercent >= 0 ? '+' : ''}{assetProfitPercent.toFixed(2)}%)
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => onEditInvestment(asset)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all cursor-pointer"
                       title="Editar ativo"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 transition-colors cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm(`Deseja remover o ativo ${asset.ticker} da sua carteira?`)) {
-                          deleteInvestment(asset.id);
-                        }
-                      }}
-                      title="Excluir ativo"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 bg-slate-800/60 hover:bg-slate-800 transition-colors cursor-pointer"
+                      onClick={() => deleteInvestment(asset.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 bg-slate-800/80 hover:bg-rose-500/20 transition-all cursor-pointer"
+                      title="Excluir ativo da carteira"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
