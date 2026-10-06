@@ -50,7 +50,11 @@ import {
   MonthCommitment
 } from '../domain/calculations';
 import { calculateInstallmentSchedule } from '../domain/installments';
-import { createInvestmentTransaction } from '../domain/investmentTransactions';
+import { 
+  createInvestmentTransaction, 
+  validateInvestmentTransaction, 
+  calculateTransactionTotal 
+} from '../domain/investmentTransactions';
 import {
   SyncStatus,
   PendingSyncOperation,
@@ -1496,18 +1500,40 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const updateInvestmentTransaction = async (id: string, updates: Partial<InvestmentTransaction>) => {
-    if (updates.assetId) {
-      const assetExists = investments.some(a => a.id === updates.assetId);
-      if (!assetExists) {
-        throw new Error(`Ativo de investimento com ID "${updates.assetId}" não encontrado na carteira.`);
-      }
+    const existing = investmentTransactions.find(t => t.id === id);
+    if (!existing) {
+      throw new Error(`Operação de investimento com ID "${id}" não encontrada.`);
     }
 
-    setInvestmentTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const merged: InvestmentTransaction = {
+      ...existing,
+      ...updates,
+      id: existing.id,
+      createdAt: existing.createdAt
+    };
+
+    // Se totalAmount não foi explicitamente alterado, mas quantidade ou preço mudaram em buy/sell, recalcula
+    if (
+      updates.totalAmount === undefined &&
+      (updates.quantity !== undefined || updates.price !== undefined) &&
+      (merged.type === 'buy' || merged.type === 'sell')
+    ) {
+      merged.totalAmount = calculateTransactionTotal(merged.quantity, merged.price);
+    }
+
+    const validation = validateInvestmentTransaction(merged, investments);
+    if (!validation.isValid) {
+      throw new Error(validation.error || 'Dados da operação inválidos.');
+    }
+
+    setInvestmentTransactions(prev => prev.map(t => t.id === id ? merged : t));
 
     if (currentUser) {
       await executeSync('investmentTransactions', id, 'update', {
         ...updates,
+        ...(updates.totalAmount === undefined && (merged.type === 'buy' || merged.type === 'sell')
+          ? { totalAmount: merged.totalAmount }
+          : {}),
         userId: currentUser.uid
       });
     }
@@ -1672,6 +1698,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify([]));
 
     setCategories(DEFAULT_CATEGORIES);
     setAccounts([]);
@@ -1682,10 +1709,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setInstallmentPlans([]);
     setTransactions([]);
     setInvestments([]);
+    setInvestmentTransactions([]);
 
     if (currentUser) {
       const uid = currentUser.uid;
-      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans', 'investments'];
+      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans', 'investments', 'investmentTransactions'];
       for (const sub of subcollections) {
         try {
           const snap = await getDocs(collection(db, 'users', uid, sub));

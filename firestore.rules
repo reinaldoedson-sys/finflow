@@ -285,7 +285,7 @@ service cloud.firestore {
           && incoming().status in ['completed', 'pending'];
       }
 
-      // Subcollection: Investment Transactions (Ledger de investimentos - Etapa 9)
+      // Subcollection: Investment Transactions (Ledger de investimentos - Etapa 9 e 9.5)
       match /investmentTransactions/{transactionId} {
         allow get, list, delete: if isOwner(userId);
         allow create: if isOwner(userId)
@@ -295,10 +295,14 @@ service cloud.firestore {
           && incoming().keys().hasOnly(['assetId', 'type', 'date', 'quantity', 'price', 'totalAmount', 'notes', 'userId', 'createdAt'])
           && incoming().assetId is string && incoming().assetId.size() <= 128
           && incoming().type in ['buy', 'sell', 'dividend']
-          && incoming().date is string && incoming().date.size() <= 10
+          && incoming().date is string && incoming().date.size() == 10 && incoming().date.matches('^\\d{4}-\\d{2}-\\d{2}$')
           && incoming().quantity is number && incoming().quantity >= 0
           && incoming().price is number && incoming().price >= 0
-          && incoming().totalAmount is number && incoming().totalAmount >= 0
+          && incoming().totalAmount is number && incoming().totalAmount > 0
+          && (
+            (incoming().type in ['buy', 'sell'] && incoming().quantity > 0 && incoming().price > 0)
+            || (incoming().type == 'dividend')
+          )
           && (!('notes' in incoming()) || (incoming().notes is string && incoming().notes.size() <= 500))
           && incoming().createdAt is string && incoming().createdAt.size() <= 64;
         allow update: if isOwner(userId)
@@ -309,10 +313,14 @@ service cloud.firestore {
           && incoming().keys().hasOnly(['assetId', 'type', 'date', 'quantity', 'price', 'totalAmount', 'notes', 'userId', 'createdAt'])
           && incoming().assetId is string && incoming().assetId.size() <= 128
           && incoming().type in ['buy', 'sell', 'dividend']
-          && incoming().date is string && incoming().date.size() <= 10
+          && incoming().date is string && incoming().date.size() == 10 && incoming().date.matches('^\\d{4}-\\d{2}-\\d{2}$')
           && incoming().quantity is number && incoming().quantity >= 0
           && incoming().price is number && incoming().price >= 0
-          && incoming().totalAmount is number && incoming().totalAmount >= 0
+          && incoming().totalAmount is number && incoming().totalAmount > 0
+          && (
+            (incoming().type in ['buy', 'sell'] && incoming().quantity > 0 && incoming().price > 0)
+            || (incoming().type == 'dividend')
+          )
           && (!('notes' in incoming()) || (incoming().notes is string && incoming().notes.size() <= 500));
       }
     }

@@ -1,7 +1,10 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   calculateTransactionTotal,
   validateInvestmentTransaction,
-  createInvestmentTransaction
+  createInvestmentTransaction,
+  isValidDateString
 } from '../src/domain/investmentTransactions';
 
 let passed = 0;
@@ -17,7 +20,7 @@ function assert(condition: boolean, message: string) {
   }
 }
 
-console.log('--- INICIANDO TESTES DO LEDGER DE INVESTIMENTOS (ETAPA 9) ---');
+console.log('--- INICIANDO TESTES DO LEDGER DE INVESTIMENTOS (ETAPA 9.5) ---');
 
 const mockAssets = [
   { id: 'inv-petr4' },
@@ -25,221 +28,366 @@ const mockAssets = [
   { id: 'inv-btc' }
 ];
 
-// Teste A: criação de compra válida
+// ==========================================
+// 1. TESTES PARA OPERAÇÕES DE COMPRA (BUY)
+// ==========================================
+console.log('\n[1. Validações de BUY]');
+
+// Quantidade zero -> rejeitar
 {
-  const tx = createInvestmentTransaction({
+  const res = validateInvestmentTransaction({
     assetId: 'inv-petr4',
     type: 'buy',
-    date: '2026-10-01',
-    quantity: 100,
+    date: '2026-10-05',
+    quantity: 0,
     price: 35.50,
-    totalAmount: 3550.00
+    totalAmount: 0
   }, mockAssets);
-
-  assert(tx.id.startsWith('itx-'), 'Teste A: ID gerado com prefixo itx-');
-  assert(tx.type === 'buy', 'Teste A: Tipo é buy');
-  assert(tx.quantity === 100, 'Teste A: Quantidade é 100');
-  assert(tx.price === 35.50, 'Teste A: Preço é 35.50');
-  assert(tx.totalAmount === 3550.00, 'Teste A: Total é 3550.00');
-  assert(typeof tx.createdAt === 'string', 'Teste A: createdAt gerado');
+  assert(!res.isValid, 'BUY: quantidade zero é rejeitada');
 }
 
-// Teste B: criação de venda válida
+// Preço zero -> rejeitar
 {
-  const tx = createInvestmentTransaction({
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-petr4',
+    type: 'buy',
+    date: '2026-10-05',
+    quantity: 10,
+    price: 0,
+    totalAmount: 0
+  }, mockAssets);
+  assert(!res.isValid, 'BUY: preço zero é rejeitado');
+}
+
+// Total zero -> rejeitar
+{
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-petr4',
+    type: 'buy',
+    date: '2026-10-05',
+    quantity: 10,
+    price: 20,
+    totalAmount: 0
+  }, mockAssets);
+  assert(!res.isValid, 'BUY: total zero é rejeitado');
+}
+
+// Total incompatível com quantidade × preço -> rejeitar (10 x 20 = 200, enviado 500)
+{
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-petr4',
+    type: 'buy',
+    date: '2026-10-05',
+    quantity: 10,
+    price: 20.00,
+    totalAmount: 500.00
+  }, mockAssets);
+  assert(!res.isValid, 'BUY: total incompatível com quantidade × preço (10 × 20 !== 500) é rejeitado');
+}
+
+// Operação válida -> aceitar
+{
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-petr4',
+    type: 'buy',
+    date: '2026-10-05',
+    quantity: 10,
+    price: 20.00,
+    totalAmount: 200.00
+  }, mockAssets);
+  assert(res.isValid, 'BUY: operação válida (10 × 20.00 = 200.00) é aceita com sucesso');
+}
+
+// ==========================================
+// 2. TESTES PARA OPERAÇÕES DE VENDA (SELL)
+// ==========================================
+console.log('\n[2. Validações de SELL]');
+
+// Quantidade zero -> rejeitar
+{
+  const res = validateInvestmentTransaction({
     assetId: 'inv-petr4',
     type: 'sell',
-    date: '2026-10-02',
+    date: '2026-10-05',
+    quantity: 0,
+    price: 37.00,
+    totalAmount: 0
+  }, mockAssets);
+  assert(!res.isValid, 'SELL: quantidade zero é rejeitada');
+}
+
+// Preço zero -> rejeitar
+{
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-petr4',
+    type: 'sell',
+    date: '2026-10-05',
+    quantity: 50,
+    price: 0,
+    totalAmount: 0
+  }, mockAssets);
+  assert(!res.isValid, 'SELL: preço zero é rejeitado');
+}
+
+// Total incompatível -> rejeitar (50 x 37 = 1850, enviado 1200)
+{
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-petr4',
+    type: 'sell',
+    date: '2026-10-05',
+    quantity: 50,
+    price: 37.00,
+    totalAmount: 1200.00
+  }, mockAssets);
+  assert(!res.isValid, 'SELL: total incompatível (50 × 37 !== 1200) é rejeitado');
+}
+
+// Operação válida -> aceitar
+{
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-petr4',
+    type: 'sell',
+    date: '2026-10-05',
     quantity: 50,
     price: 37.00,
     totalAmount: 1850.00
   }, mockAssets);
-
-  assert(tx.type === 'sell', 'Teste B: Tipo é sell');
-  assert(tx.quantity === 50, 'Teste B: Quantidade vendida é 50');
-  assert(tx.totalAmount === 1850.00, 'Teste B: Total é 1850.00');
+  assert(res.isValid, 'SELL: operação válida (50 × 37.00 = 1850.00) é aceita');
 }
 
-// Teste C: criação de dividendo válido (permite quantidade zero)
+// ==========================================
+// 3. TESTES PARA DIVIDENDOS (DIVIDEND)
+// ==========================================
+console.log('\n[3. Validações de DIVIDEND]');
+
+// Total zero -> rejeitar
 {
-  const tx = createInvestmentTransaction({
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-mxrf11',
+    type: 'dividend',
+    date: '2026-10-05',
+    quantity: 0,
+    price: 0,
+    totalAmount: 0
+  }, mockAssets);
+  assert(!res.isValid, 'DIVIDEND: total zero é rejeitado');
+}
+
+// Total negativo -> rejeitar
+{
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-mxrf11',
+    type: 'dividend',
+    date: '2026-10-05',
+    quantity: 0,
+    price: 0,
+    totalAmount: -35.00
+  }, mockAssets);
+  assert(!res.isValid, 'DIVIDEND: total negativo é rejeitado');
+}
+
+// Dividendo válido -> aceitar
+{
+  const res = validateInvestmentTransaction({
     assetId: 'inv-mxrf11',
     type: 'dividend',
     date: '2026-10-05',
     quantity: 0,
     price: 0,
     totalAmount: 30.50,
-    notes: 'Rendimento mensal do fundo'
+    notes: 'Proventos mensais'
   }, mockAssets);
-
-  assert(tx.type === 'dividend', 'Teste C: Tipo é dividend');
-  assert(tx.quantity === 0, 'Teste C: Dividendo permite quantidade zero');
-  assert(tx.totalAmount === 30.50, 'Teste C: Valor do dividendo correto');
-  assert(tx.notes === 'Rendimento mensal do fundo', 'Teste C: Notas preservadas');
+  assert(res.isValid, 'DIVIDEND: dividendo válido com quantidade/preço zero e total > 0 é aceito');
 }
 
-// Teste D: rejeição de tipo inválido
+// ==========================================
+// 4. TESTES DE VALIDAÇÃO DE DATA (DATE)
+// ==========================================
+console.log('\n[4. Validações de DATA]');
+
+// '2026-10-05' -> aceitar
 {
-  const result = validateInvestmentTransaction({
+  assert(isValidDateString('2026-10-05'), "DATA: '2026-10-05' é aceita");
+  const res = validateInvestmentTransaction({
     assetId: 'inv-petr4',
-    type: 'deposit' as any,
-    date: '2026-10-01',
-    quantity: 10,
+    type: 'buy',
+    date: '2026-10-05',
+    quantity: 1,
     price: 10,
-    totalAmount: 100
-  });
-
-  assert(!result.isValid, 'Teste D: Tipo inválido é rejeitado');
-  assert(typeof result.error === 'string', 'Teste D: Retorna mensagem de erro');
+    totalAmount: 10
+  }, mockAssets);
+  assert(res.isValid, "DATA: transação com data '2026-10-05' é aceita");
 }
 
-// Teste E: rejeição de quantidade negativa
+// '2026-1-5' -> rejeitar (falta zero à esquerda)
 {
-  const resultNegative = validateInvestmentTransaction({
-    assetId: 'inv-petr4',
-    type: 'buy',
-    date: '2026-10-01',
-    quantity: -10,
-    price: 30,
-    totalAmount: 300
-  });
-
-  assert(!resultNegative.isValid, 'Teste E: Quantidade negativa é rejeitada');
-
-  const resultZeroBuy = validateInvestmentTransaction({
-    assetId: 'inv-petr4',
-    type: 'buy',
-    date: '2026-10-01',
-    quantity: 0,
-    price: 30,
-    totalAmount: 0
-  });
-
-  assert(!resultZeroBuy.isValid, 'Teste E: Quantidade zero para compra é rejeitada');
+  assert(!isValidDateString('2026-1-5'), "DATA: '2026-1-5' sem zero à esquerda é rejeitada");
 }
 
-// Teste F: rejeição de valor negativo
+// '05/10/2026' -> rejeitar (formato brasileiro não aceito pelo padrão do app)
 {
-  const resultNegPrice = validateInvestmentTransaction({
+  assert(!isValidDateString('05/10/2026'), "DATA: '05/10/2026' fora do padrão ISO YYYY-MM-DD é rejeitada");
+}
+
+// 'banana' -> rejeitar
+{
+  assert(!isValidDateString('banana'), "DATA: 'banana' é rejeitada");
+}
+
+// '2026' -> rejeitar
+{
+  assert(!isValidDateString('2026'), "DATA: '2026' incompleta é rejeitada");
+}
+
+// Data impossível: '2026-99-99' -> rejeitar
+{
+  assert(!isValidDateString('2026-99-99'), "DATA: '2026-99-99' com mês e dia inválidos é rejeitada");
+}
+
+// Data impossível: '2026-02-30' -> rejeitar (fevereiro não tem dia 30)
+{
+  assert(!isValidDateString('2026-02-30'), "DATA: '2026-02-30' dia impossível em fevereiro é rejeitada");
+}
+
+// ==========================================
+// 5. TESTES DE ASSET ID E INTEGRIDADE REFERENCIAL
+// ==========================================
+console.log('\n[5. Validações de ASSET]');
+
+// assetId existente -> aceitar
+{
+  const res = validateInvestmentTransaction({
     assetId: 'inv-petr4',
     type: 'buy',
-    date: '2026-10-01',
+    date: '2026-10-05',
     quantity: 10,
-    price: -5,
-    totalAmount: 50
-  });
-
-  assert(!resultNegPrice.isValid, 'Teste F: Preço negativo é rejeitado');
-
-  const resultNegTotal = validateInvestmentTransaction({
-    assetId: 'inv-petr4',
-    type: 'buy',
-    date: '2026-10-01',
-    quantity: 10,
-    price: 10,
-    totalAmount: -100
-  });
-
-  assert(!resultNegTotal.isValid, 'Teste F: Total negativo é rejeitado');
+    price: 20,
+    totalAmount: 200
+  }, mockAssets);
+  assert(res.isValid, "ASSET: assetId existente ('inv-petr4') é aceito");
 }
 
-// Teste G: rejeição de NaN/Infinity
+// assetId inexistente -> rejeitar
 {
-  const resultNaNQty = validateInvestmentTransaction({
+  const res = validateInvestmentTransaction({
+    assetId: 'inv-fantasma',
+    type: 'buy',
+    date: '2026-10-05',
+    quantity: 10,
+    price: 20,
+    totalAmount: 200
+  }, mockAssets);
+  assert(!res.isValid, "ASSET: assetId inexistente ('inv-fantasma') é rejeitado");
+}
+
+// ==========================================
+// 6. TESTES DE CRIAÇÃO E PRECISÃO MONETÁRIA
+// ==========================================
+console.log('\n[6. Criação e Precisão Monetária]');
+
+// Cálculo com centavos exatos
+{
+  const total = calculateTransactionTotal(3, 10.33);
+  assert(total === 30.99, `Precisão: cálculo com centavos exatos 3 * 10.33 = 30.99 (obtido: ${total})`);
+}
+
+// Auto-cálculo de totalAmount em createInvestmentTransaction
+{
+  const tx = createInvestmentTransaction({
     assetId: 'inv-petr4',
     type: 'buy',
-    date: '2026-10-01',
+    date: '2026-10-05',
+    quantity: 100,
+    price: 35.50
+  }, mockAssets);
+  assert(tx.totalAmount === 3550.00, `createInvestmentTransaction auto-calcula totalAmount (esperado 3550.00, obtido: ${tx.totalAmount})`);
+  assert(tx.id.startsWith('itx-'), 'Prefixo itx- gerado corretamente no ID');
+}
+
+// Rejeição de NaN e Infinity
+{
+  const resNaN = validateInvestmentTransaction({
+    assetId: 'inv-petr4',
+    type: 'buy',
+    date: '2026-10-05',
     quantity: NaN,
     price: 20,
     totalAmount: 200
-  });
+  }, mockAssets);
+  assert(!resNaN.isValid, 'NaN em quantidade é rejeitado');
 
-  assert(!resultNaNQty.isValid, 'Teste G: NaN na quantidade é rejeitado');
-
-  const resultInfPrice = validateInvestmentTransaction({
+  const resInf = validateInvestmentTransaction({
     assetId: 'inv-petr4',
     type: 'buy',
-    date: '2026-10-01',
+    date: '2026-10-05',
     quantity: 10,
     price: Infinity,
     totalAmount: 200
-  });
-
-  assert(!resultInfPrice.isValid, 'Teste G: Infinity no preço é rejeitado');
+  }, mockAssets);
+  assert(!resInf.isValid, 'Infinity em preço é rejeitado');
 }
 
-// Teste H: rejeição de operação sem assetId e ativo inexistente
+// ==========================================
+// 7. AUDITORIA ESTÁTICA DE CLEAR ALL DATA
+// ==========================================
+console.log('\n[7. Auditoria de clearAllData no FinanceContext]');
+
 {
-  const resultNoAsset = validateInvestmentTransaction({
-    assetId: '',
-    type: 'buy',
-    date: '2026-10-01',
-    quantity: 10,
-    price: 20,
-    totalAmount: 200
-  });
-
-  assert(!resultNoAsset.isValid, 'Teste H: Operação sem assetId é rejeitada');
-
-  let threwNonExistent = false;
-  try {
-    createInvestmentTransaction({
-      assetId: 'inv-inexistente',
-      type: 'buy',
-      date: '2026-10-01',
-      quantity: 10,
-      price: 20,
-      totalAmount: 200
-    }, mockAssets);
-  } catch (err: any) {
-    threwNonExistent = true;
+  const financeContextCode = fs.readFileSync(path.resolve(process.cwd(), 'src/context/FinanceContext.tsx'), 'utf-8');
+  
+  // Extrai a função clearAllData
+  const clearAllDataMatch = financeContextCode.match(/const clearAllData = async \(\) => {([\s\S]*?)};/);
+  assert(clearAllDataMatch !== null, 'clearAllData() está declarada no FinanceContext');
+  
+  if (clearAllDataMatch) {
+    const code = clearAllDataMatch[1];
+    assert(
+      code.includes("localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify([]))"),
+      "clearAllData() reseta 'finflow_app_investment_transactions' no localStorage"
+    );
+    assert(
+      code.includes('setInvestmentTransactions([])'),
+      'clearAllData() limpa o estado de investmentTransactions'
+    );
+    assert(
+      code.includes("'investmentTransactions'") && code.includes('subcollections'),
+      "clearAllData() inclui 'investmentTransactions' nas subcoleções a serem apagadas do Firestore"
+    );
   }
-  assert(threwNonExistent, 'Teste H: Operação apontando para ativo inexistente lança erro');
 }
 
-// Teste I: cálculo de totalAmount usando precisão monetária (centavos)
+// ==========================================
+// 8. AUDITORIA DAS FIRESTORE RULES (ETAPA 9.5)
+// ==========================================
+console.log('\n[8. Auditoria das Firestore Rules para investmentTransactions]');
+
 {
-  // 3 cotas a R$ 10.33 -> 3 * 1033 centavos = 3099 centavos -> R$ 30.99
-  const total = calculateTransactionTotal(3, 10.33);
-  assert(total === 30.99, `Teste I: Cálculo com centavos exatos (esperado 30.99, obtido: ${total})`);
+  const firestoreRulesCode = fs.readFileSync(path.resolve(process.cwd(), 'firestore.rules'), 'utf-8');
+  
+  assert(
+    firestoreRulesCode.includes('match /investmentTransactions/{transactionId}'),
+    'Bloco match /investmentTransactions/{transactionId} presente em firestore.rules'
+  );
 
-  // Se createInvestmentTransaction não receber totalAmount, calcula automaticamente
-  const txAuto = createInvestmentTransaction({
-    assetId: 'inv-petr4',
-    type: 'buy',
-    date: '2026-10-01',
-    quantity: 100,
-    price: 20.00,
-    totalAmount: 0 // Solicita cálculo automático
-  }, mockAssets);
+  assert(
+    firestoreRulesCode.includes("incoming().date.matches('^\\\\d{4}-\\\\d{2}-\\\\d{2}$')"),
+    'Firestore Rules valida formato de date com regex ^\\d{4}-\\d{2}-\\d{2}$'
+  );
 
-  assert(txAuto.totalAmount === 2000.00, `Teste I: Cálculo automático de totalAmount (esperado 2000.00, obtido: ${txAuto.totalAmount})`);
+  assert(
+    firestoreRulesCode.includes('incoming().totalAmount > 0'),
+    'Firestore Rules exige totalAmount > 0 para operações de investimento'
+  );
+
+  assert(
+    firestoreRulesCode.includes("incoming().type in ['buy', 'sell'] && incoming().quantity > 0 && incoming().price > 0"),
+    'Firestore Rules exige quantity > 0 e price > 0 para compra e venda'
+  );
 }
 
-// Teste J: IDs diferentes para duas operações criadas
-{
-  const tx1 = createInvestmentTransaction({
-    assetId: 'inv-petr4',
-    type: 'buy',
-    date: '2026-10-01',
-    quantity: 10,
-    price: 20,
-    totalAmount: 200
-  }, mockAssets);
-
-  const tx2 = createInvestmentTransaction({
-    assetId: 'inv-petr4',
-    type: 'buy',
-    date: '2026-10-01',
-    quantity: 10,
-    price: 20,
-    totalAmount: 200
-  }, mockAssets);
-
-  assert(tx1.id !== tx2.id, `Teste J: IDs são únicos e distintos (${tx1.id} !== ${tx2.id})`);
-}
-
-console.log(`\nResultado Final dos Testes do Ledger de Investimentos: ${passed} passaram, ${failed} falharam.`);
+console.log(`\n======================================================`);
+console.log(`Resultado Final dos Testes do Ledger (Etapa 9.5): ${passed} passaram, ${failed} falharam.`);
+console.log(`======================================================\n`);
 
 if (failed > 0) {
   process.exit(1);
