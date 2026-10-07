@@ -462,4 +462,14 @@ export const INITIAL_INVESTMENT_TRANSACTIONS: InvestmentTransaction[] = [
   }
 ];
 
+export const SAMPLE_ACCOUNT_IDS = new Set(INITIAL_ACCOUNTS.map(a => a.id));
+export const SAMPLE_CARD_IDS = new Set(INITIAL_CREDIT_CARDS.map(c => c.id));
+export const SAMPLE_BUDGET_IDS = new Set(INITIAL_BUDGETS.map(b => b.id));
+export const SAMPLE_GOAL_IDS = new Set(INITIAL_GOALS.map(g => g.id));
+export const SAMPLE_GOAL_MOVEMENT_IDS = new Set(INITIAL_GOAL_MOVEMENTS.map(m => m.id));
+export const SAMPLE_PLAN_IDS = new Set(INITIAL_INSTALLMENT_PLANS.map(p => p.id));
+export const SAMPLE_TRANSACTION_IDS = new Set(INITIAL_TRANSACTIONS.map(t => t.id));
+export const SAMPLE_INVESTMENT_IDS = new Set(INITIAL_INVESTMENTS.map(i => i.id));
+export const SAMPLE_INVESTMENT_TX_IDS = new Set(INITIAL_INVESTMENT_TRANSACTIONS.map(t => t.id));
+
 

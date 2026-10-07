@@ -601,9 +601,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           </div>
           <button
             onClick={async () => {
-              await clearSampleData();
-              setSyncFeedback('Dados de exemplo removidos com sucesso! Você agora está com o FinFlow limpo.');
-              setTimeout(() => setSyncFeedback(null), 3500);
+              try {
+                await clearSampleData();
+                setSyncFeedback('Dados de exemplo removidos com sucesso! Você agora está com o FinFlow limpo.');
+                setTimeout(() => setSyncFeedback(null), 3500);
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : 'Falha ao remover dados de teste.';
+                setSyncFeedback(msg);
+                setTimeout(() => setSyncFeedback(null), 5000);
+              }
             }}
             className="px-3.5 py-1.5 text-xs font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
@@ -621,9 +627,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           </div>
           <button
             onClick={async () => {
-              await resetToDefaults();
-              setSyncFeedback('Dados de demonstração recarregados.');
-              setTimeout(() => setSyncFeedback(null), 3500);
+              try {
+                await resetToDefaults();
+                setSyncFeedback('Dados de demonstração recarregados com sucesso.');
+                setTimeout(() => setSyncFeedback(null), 3500);
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : 'Falha ao recarregar dados padrão.';
+                setSyncFeedback(msg);
+                setTimeout(() => setSyncFeedback(null), 5000);
+              }
             }}
             className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
@@ -650,7 +662,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
             <div className="flex items-center gap-2">
               <span className="text-xs text-rose-300 font-semibold">Tem certeza?</span>
               <button
-                onClick={() => { clearAllData(); setConfirmClear(false); }}
+                onClick={async () => {
+                  try {
+                    await clearAllData();
+                    setSyncFeedback('Todos os dados foram apagados com sucesso.');
+                    setTimeout(() => setSyncFeedback(null), 3500);
+                  } catch (err: unknown) {
+                    const msg = err instanceof Error ? err.message : 'Falha ao apagar todos os dados.';
+                    setSyncFeedback(msg);
+                    setTimeout(() => setSyncFeedback(null), 5000);
+                  } finally {
+                    setConfirmClear(false);
+                  }
+                }}
                 className="px-3 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg transition-all"
               >
                 Sim, Limpar

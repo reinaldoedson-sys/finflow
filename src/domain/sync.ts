@@ -33,6 +33,58 @@ export interface PendingSyncOperation {
 
 export const STORAGE_PENDING_QUEUE_KEY = 'finflow_app_pending_sync_queue';
 
+export const ALL_SYNC_SUBCOLLECTIONS: readonly SyncCollection[] = [
+  'transactions',
+  'accounts',
+  'creditCards',
+  'categories',
+  'budgets',
+  'goals',
+  'goalMovements',
+  'installmentPlans',
+  'investments',
+  'investmentTransactions'
+] as const;
+
+import {
+  SAMPLE_ACCOUNT_IDS,
+  SAMPLE_CARD_IDS,
+  SAMPLE_BUDGET_IDS,
+  SAMPLE_GOAL_IDS,
+  SAMPLE_GOAL_MOVEMENT_IDS,
+  SAMPLE_PLAN_IDS,
+  SAMPLE_TRANSACTION_IDS,
+  SAMPLE_INVESTMENT_IDS,
+  SAMPLE_INVESTMENT_TX_IDS
+} from '../utils/mockData';
+
+/**
+ * Determina se um ID de documento pertence ao conjunto inicial/padrão de demonstração.
+ */
+export function isSampleDataDocument(collection: string, docId: string): boolean {
+  switch (collection) {
+    case 'accounts': return SAMPLE_ACCOUNT_IDS.has(docId);
+    case 'creditCards': return SAMPLE_CARD_IDS.has(docId);
+    case 'budgets': return SAMPLE_BUDGET_IDS.has(docId);
+    case 'goals': return SAMPLE_GOAL_IDS.has(docId);
+    case 'goalMovements': return SAMPLE_GOAL_MOVEMENT_IDS.has(docId);
+    case 'installmentPlans': return SAMPLE_PLAN_IDS.has(docId);
+    case 'transactions': return SAMPLE_TRANSACTION_IDS.has(docId);
+    case 'investments': return SAMPLE_INVESTMENT_IDS.has(docId);
+    case 'investmentTransactions': return SAMPLE_INVESTMENT_TX_IDS.has(docId);
+    case 'categories': return false; // Categorias são canônicas/permanentes
+    default: return false;
+  }
+}
+
+/**
+ * Filtra uma coleção em memória para remover apenas os itens de demonstração,
+ * preservando integralmente os itens criados pelo usuário.
+ */
+export function filterOutSampleData<T extends { id: string }>(collection: SyncCollection, items: T[]): T[] {
+  return items.filter(item => !isSampleDataDocument(collection, item.id));
+}
+
 /**
  * Gera um ID estável para a operação na fila baseado na coleção e docId.
  * Isso garante que múltiplas tentativas de retry para o mesmo documento não se dupliquem.

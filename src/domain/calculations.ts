@@ -170,6 +170,42 @@ export function calculateGoalBalance(
   return Math.max(0, fromCents(totalCents));
 }
 
+/**
+ * Resolve o initialAmount canônico de uma meta (Etapa 9.6A).
+ * 
+ * Regra:
+ * 1. Se initialAmount estiver presente e for numérico (mesmo 0), ele é a fonte da verdade.
+ * 2. Se initialAmount não existir (legado), deduz initialAmount a partir de
+ *    rawCurrentAmount - movimentações líquidas, com piso em zero:
+ *    inferredInitial = Math.max(0, rawCurrentAmount - (depósitos - resgates)).
+ *    Isso garante que ao aplicar calculateGoalBalance(inferredInitial, movements),
+ *    o saldo final continue sendo exatamente rawCurrentAmount, prevenindo dupla contagem!
+ */
+export function resolveGoalInitialAmount(
+  goal: { initialAmount?: number; currentAmount?: number },
+  movements: GoalMovement[] = []
+): number {
+  if (typeof goal.initialAmount === 'number' && !isNaN(goal.initialAmount)) {
+    return Math.max(0, fromCents(toCents(goal.initialAmount)));
+  }
+
+  const rawCurrent = typeof goal.currentAmount === 'number' && !isNaN(goal.currentAmount)
+    ? goal.currentAmount
+    : 0;
+
+  let netMovementsCents = 0;
+  for (const m of movements) {
+    if (m.type === 'withdrawal' || (m.type as any) === 'withdraw' || m.amount < 0) {
+      netMovementsCents -= toCents(Math.abs(m.amount));
+    } else {
+      netMovementsCents += toCents(Math.abs(m.amount));
+    }
+  }
+
+  const inferredCents = Math.max(0, toCents(rawCurrent) - netMovementsCents);
+  return fromCents(inferredCents);
+}
+
 export interface MonthCommitment {
   month: string; // YYYY-MM
   installmentsAmount: number;

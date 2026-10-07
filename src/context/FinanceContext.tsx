@@ -23,7 +23,16 @@ import {
   INITIAL_TRANSACTIONS,
   INITIAL_INSTALLMENT_PLANS,
   INITIAL_INVESTMENTS,
-  INITIAL_INVESTMENT_TRANSACTIONS
+  INITIAL_INVESTMENT_TRANSACTIONS,
+  SAMPLE_ACCOUNT_IDS,
+  SAMPLE_CARD_IDS,
+  SAMPLE_BUDGET_IDS,
+  SAMPLE_GOAL_IDS,
+  SAMPLE_GOAL_MOVEMENT_IDS,
+  SAMPLE_PLAN_IDS,
+  SAMPLE_TRANSACTION_IDS,
+  SAMPLE_INVESTMENT_IDS,
+  SAMPLE_INVESTMENT_TX_IDS
 } from '../utils/mockData';
 import { fetchMarketQuotes } from '../services/marketQuotes';
 import { getCurrentMonth, getPreviousMonth, getNextMonth } from '../utils/currency';
@@ -48,6 +57,7 @@ import {
   calculateMonthlySummary,
   calculateFutureCommitments,
   calculateGoalBalance,
+  resolveGoalInitialAmount,
   MonthCommitment
 } from '../domain/calculations';
 import { calculateInstallmentSchedule } from '../domain/installments';
@@ -66,7 +76,10 @@ import {
   dequeueOperation,
   mergeCloudWithPending,
   loadPendingQueueFromStorage,
-  savePendingQueueToStorage
+  savePendingQueueToStorage,
+  ALL_SYNC_SUBCOLLECTIONS,
+  isSampleDataDocument,
+  filterOutSampleData
 } from '../domain/sync';
 
 interface FinanceContextType {
@@ -249,12 +262,16 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const [goals, setGoals] = useState<FinancialGoal[]>(() => {
     const rawGoals = getInitialData<FinancialGoal[]>('goals', INITIAL_GOALS);
-    return rawGoals.map(g => ({
-      ...g,
-      initialAmount: typeof g.initialAmount === 'number'
-        ? g.initialAmount
-        : (typeof g.currentAmount === 'number' ? g.currentAmount : 0)
-    }));
+    const rawMovements = getInitialData<GoalMovement[]>('goal_movements', INITIAL_GOAL_MOVEMENTS);
+    return rawGoals.map(g => {
+      const movs = rawMovements.filter(m => m.goalId === g.id);
+      const resolvedInitial = resolveGoalInitialAmount(g, movs);
+      return {
+        ...g,
+        initialAmount: resolvedInitial,
+        currentAmount: calculateGoalBalance(resolvedInitial, movs)
+      };
+    });
   });
 
   const [goalMovements, setGoalMovements] = useState<GoalMovement[]>(() =>
@@ -315,8 +332,17 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [budgets]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify(goals));
-  }, [goals]);
+    const sanitizedGoals = goals.map(g => {
+      const movements = goalMovements.filter(m => m.goalId === g.id);
+      const initial = resolveGoalInitialAmount(g, movements);
+      return {
+        ...g,
+        initialAmount: initial,
+        currentAmount: calculateGoalBalance(initial, movements)
+      };
+    });
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify(sanitizedGoals));
+  }, [goals, goalMovements]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify(goalMovements));
@@ -424,13 +450,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       (snapshot) => {
         const list = snapshot.docs.map(doc => {
           const data = doc.data();
-          const initialAmount = typeof data.initialAmount === 'number'
-            ? data.initialAmount
-            : (typeof data.currentAmount === 'number' ? data.currentAmount : 0);
           return {
             id: doc.id,
             ...data,
-            initialAmount
+            initialAmount: typeof data.initialAmount === 'number' ? data.initialAmount : undefined
           } as FinancialGoal;
         });
         setGoals(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'goals', prev));
@@ -484,24 +507,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       collection(db, 'users', uid, 'investments'),
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InvestmentAsset));
-        setInvestments(prev => {
-          if (list.length > 0) {
-            return mergeCloudWithPending(list, pendingQueueRef.current, 'investments', prev);
-          }
-          // Se a nuvem ainda não tem investimentos, mas o usuário possui ativos cadastrados localmente,
-          // preserva-os e sincroniza para a nuvem automaticamente (evita perda de dados entre mobile/web)
-          const customInvestments = prev.filter(inv => !INITIAL_INVESTMENTS.some(init => init.id === inv.id));
-          if (customInvestments.length > 0) {
-            customInvestments.forEach(inv => {
-              executeSync('investments', inv.id, 'set', {
-                ...inv,
-                userId: uid
-              });
-            });
-            return prev;
-          }
-          return mergeCloudWithPending(list, pendingQueueRef.current, 'investments', prev);
-        });
+        setInvestments(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'investments', prev));
       },
       (error) => {
         console.warn('[FinFlow Sync] Erro ao escutar investimentos no Firestore:', error);
@@ -514,19 +520,6 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InvestmentTransaction));
         setInvestmentTransactions(prev => {
-          if (list.length > 0) {
-            const merged = mergeCloudWithPending(list, pendingQueueRef.current, 'investmentTransactions', prev);
-            return merged.sort((a, b) => b.date.localeCompare(a.date));
-          }
-          if (prev.length > 0) {
-            prev.forEach(itx => {
-              executeSync('investmentTransactions', itx.id, 'set', {
-                ...itx,
-                userId: uid
-              });
-            });
-            return prev;
-          }
           const merged = mergeCloudWithPending(list, pendingQueueRef.current, 'investmentTransactions', prev);
           return merged.sort((a, b) => b.date.localeCompare(a.date));
         });
@@ -559,161 +552,230 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [accounts, transactions]);
 
   // Seeds current dataset to Firestore for authenticated user (never forces demo data if user emptied state)
-  const seedInitialDataToCloud = async (uid: string) => {
+  const seedInitialDataToCloud = async (
+    uid: string,
+    customDataset?: {
+      categories?: Category[];
+      accounts?: Account[];
+      creditCards?: CreditCard[];
+      budgets?: Budget[];
+      goals?: FinancialGoal[];
+      goalMovements?: GoalMovement[];
+      installmentPlans?: InstallmentPlan[];
+      transactions?: Transaction[];
+      investments?: InvestmentAsset[];
+      investmentTransactions?: InvestmentTransaction[];
+    }
+  ) => {
     try {
-      const batch = writeBatch(db);
+      const items: { ref: any; data: any }[] = [];
+
+      const targetCategories = customDataset?.categories ?? categories;
+      const targetAccounts = customDataset?.accounts ?? accounts;
+      const targetCards = customDataset?.creditCards ?? creditCards;
+      const targetBudgets = customDataset?.budgets ?? budgets;
+      const targetGoals = customDataset?.goals ?? goals;
+      const targetMovements = customDataset?.goalMovements ?? goalMovements;
+      const targetPlans = customDataset?.installmentPlans ?? installmentPlans;
+      const targetTransactions = customDataset?.transactions ?? transactions;
+      const targetInvestments = customDataset?.investments ?? investments;
+      const targetInvestmentTxs = customDataset?.investmentTransactions ?? investmentTransactions;
 
       // Seed categories
-      for (const cat of categories) {
-        const ref = doc(db, 'users', uid, 'categories', cat.id);
-        batch.set(ref, {
-          name: cat.name,
-          icon: cat.icon,
-          color: cat.color,
-          type: cat.type,
-          userId: uid
+      for (const cat of targetCategories) {
+        items.push({
+          ref: doc(db, 'users', uid, 'categories', cat.id),
+          data: {
+            name: cat.name,
+            icon: cat.icon,
+            color: cat.color,
+            type: cat.type,
+            userId: uid
+          }
         });
       }
 
       // Seed accounts
-      for (const acc of accounts) {
-        const ref = doc(db, 'users', uid, 'accounts', acc.id);
-        batch.set(ref, {
-          name: acc.name,
-          bankName: acc.bankName,
-          type: acc.type,
-          color: acc.color,
-          initialBalance: acc.initialBalance,
-          currentBalance: acc.currentBalance,
-          icon: acc.icon,
-          userId: uid
+      for (const acc of targetAccounts) {
+        items.push({
+          ref: doc(db, 'users', uid, 'accounts', acc.id),
+          data: {
+            name: acc.name,
+            bankName: acc.bankName,
+            type: acc.type,
+            color: acc.color,
+            initialBalance: acc.initialBalance,
+            currentBalance: acc.currentBalance,
+            icon: acc.icon,
+            userId: uid
+          }
         });
       }
 
       // Seed credit cards
-      for (const card of creditCards) {
-        const ref = doc(db, 'users', uid, 'creditCards', card.id);
-        batch.set(ref, {
-          name: card.name,
-          bankName: card.bankName,
-          color: card.color,
-          limit: card.limit,
-          closingDay: card.closingDay,
-          dueDay: card.dueDay,
-          currentInvoice: card.currentInvoice,
-          userId: uid
+      for (const card of targetCards) {
+        items.push({
+          ref: doc(db, 'users', uid, 'creditCards', card.id),
+          data: {
+            name: card.name,
+            bankName: card.bankName,
+            color: card.color,
+            limit: card.limit,
+            closingDay: card.closingDay,
+            dueDay: card.dueDay,
+            currentInvoice: card.currentInvoice,
+            userId: uid
+          }
         });
       }
 
       // Seed budgets
-      for (const b of budgets) {
-        const ref = doc(db, 'users', uid, 'budgets', b.id);
-        batch.set(ref, {
-          categoryId: b.categoryId,
-          month: b.month,
-          limitAmount: b.limitAmount,
-          userId: uid
+      for (const b of targetBudgets) {
+        items.push({
+          ref: doc(db, 'users', uid, 'budgets', b.id),
+          data: {
+            categoryId: b.categoryId,
+            month: b.month,
+            limitAmount: b.limitAmount,
+            userId: uid
+          }
         });
       }
 
-      // Seed goals
-      for (const g of goals) {
-        const ref = doc(db, 'users', uid, 'goals', g.id);
-        batch.set(ref, {
-          name: g.name,
-          targetAmount: g.targetAmount,
-          currentAmount: g.currentAmount,
-          targetDate: g.targetDate,
-          color: g.color,
-          icon: g.icon,
-          notes: g.notes || '',
-          userId: uid
+      // Seed goals - Preserva explicitamente initialAmount para evitar dupla contagem pós-reload (Etapa 9.6A)
+      for (const g of targetGoals) {
+        const movements = targetMovements.filter(m => m.goalId === g.id);
+        const resolvedInitial = resolveGoalInitialAmount(g, movements);
+        const derivedBalance = calculateGoalBalance(resolvedInitial, movements);
+        items.push({
+          ref: doc(db, 'users', uid, 'goals', g.id),
+          data: {
+            name: g.name,
+            targetAmount: g.targetAmount,
+            initialAmount: resolvedInitial,
+            currentAmount: derivedBalance,
+            targetDate: g.targetDate,
+            color: g.color,
+            icon: g.icon,
+            notes: g.notes || '',
+            userId: uid
+          }
+        });
+      }
+
+      // Seed goal movements (Ledger de metas - Etapa 7)
+      for (const mov of targetMovements) {
+        items.push({
+          ref: doc(db, 'users', uid, 'goalMovements', mov.id),
+          data: {
+            goalId: mov.goalId,
+            type: mov.type,
+            amount: mov.amount,
+            date: mov.date,
+            createdAt: mov.createdAt,
+            ...(mov.notes ? { notes: mov.notes } : {}),
+            userId: uid
+          }
         });
       }
 
       // Seed installment plans
-      for (const p of installmentPlans) {
-        const ref = doc(db, 'users', uid, 'installmentPlans', p.id);
-        batch.set(ref, {
-          description: p.description,
-          totalAmount: p.totalAmount,
-          installmentAmount: p.installmentAmount,
-          totalInstallments: p.totalInstallments,
-          type: p.type,
-          categoryId: p.categoryId || 'cat-compras',
-          accountId: p.accountId,
-          creditCardId: p.creditCardId || '',
-          paymentMethod: p.paymentMethod,
-          startDate: p.startDate,
-          userId: uid,
-          createdAt: p.createdAt
+      for (const p of targetPlans) {
+        items.push({
+          ref: doc(db, 'users', uid, 'installmentPlans', p.id),
+          data: {
+            description: p.description,
+            totalAmount: p.totalAmount,
+            installmentAmount: p.installmentAmount,
+            totalInstallments: p.totalInstallments,
+            type: p.type,
+            categoryId: p.categoryId || 'cat-compras',
+            accountId: p.accountId,
+            creditCardId: p.creditCardId || '',
+            paymentMethod: p.paymentMethod,
+            startDate: p.startDate,
+            userId: uid,
+            createdAt: p.createdAt
+          }
         });
       }
 
       // Seed transactions
-      for (const tx of transactions) {
-        const ref = doc(db, 'users', uid, 'transactions', tx.id);
-        batch.set(ref, {
-          description: tx.description,
-          amount: tx.amount,
-          type: tx.type,
-          categoryId: tx.categoryId,
-          accountId: tx.accountId,
-          targetAccountId: tx.targetAccountId || '',
-          creditCardId: tx.creditCardId || '',
-          paymentMethod: tx.paymentMethod,
-          date: tx.date,
-          status: tx.status,
-          notes: tx.notes || '',
-          isRecurring: !!tx.isRecurring,
-          ...(tx.installmentPlanId ? { installmentPlanId: tx.installmentPlanId } : {}),
-          ...(tx.installments ? { installments: tx.installments } : {}),
-          userId: uid,
-          createdAt: tx.createdAt
+      for (const tx of targetTransactions) {
+        items.push({
+          ref: doc(db, 'users', uid, 'transactions', tx.id),
+          data: {
+            description: tx.description,
+            amount: tx.amount,
+            type: tx.type,
+            categoryId: tx.categoryId,
+            accountId: tx.accountId,
+            targetAccountId: tx.targetAccountId || '',
+            creditCardId: tx.creditCardId || '',
+            paymentMethod: tx.paymentMethod,
+            date: tx.date,
+            status: tx.status,
+            notes: tx.notes || '',
+            isRecurring: !!tx.isRecurring,
+            ...(tx.installmentPlanId ? { installmentPlanId: tx.installmentPlanId } : {}),
+            ...(tx.installments ? { installments: tx.installments } : {}),
+            userId: uid,
+            createdAt: tx.createdAt
+          }
         });
       }
 
       // Seed investments
-      for (const inv of investments) {
-        const ref = doc(db, 'users', uid, 'investments', inv.id);
-        batch.set(ref, {
-          ticker: inv.ticker,
-          name: inv.name,
-          type: inv.type,
-          quantity: inv.quantity,
-          averagePrice: inv.averagePrice,
-          currentPrice: inv.currentPrice,
-          currency: inv.currency,
-          autoUpdate: !!inv.autoUpdate,
-          ...(inv.previousClose !== undefined ? { previousClose: inv.previousClose } : {}),
-          ...(inv.changePercent !== undefined ? { changePercent: inv.changePercent } : {}),
-          ...(inv.institution ? { institution: inv.institution } : {}),
-          ...(inv.lastPriceUpdate ? { lastPriceUpdate: inv.lastPriceUpdate } : {}),
-          ...(inv.notes ? { notes: inv.notes } : {}),
-          userId: uid,
-          createdAt: inv.createdAt
+      for (const inv of targetInvestments) {
+        items.push({
+          ref: doc(db, 'users', uid, 'investments', inv.id),
+          data: {
+            ticker: inv.ticker,
+            name: inv.name,
+            type: inv.type,
+            quantity: inv.quantity,
+            averagePrice: inv.averagePrice,
+            currentPrice: inv.currentPrice,
+            currency: inv.currency,
+            autoUpdate: !!inv.autoUpdate,
+            ...(inv.previousClose !== undefined ? { previousClose: inv.previousClose } : {}),
+            ...(inv.changePercent !== undefined ? { changePercent: inv.changePercent } : {}),
+            ...(inv.institution ? { institution: inv.institution } : {}),
+            ...(inv.lastPriceUpdate ? { lastPriceUpdate: inv.lastPriceUpdate } : {}),
+            ...(inv.notes ? { notes: inv.notes } : {}),
+            userId: uid,
+            createdAt: inv.createdAt
+          }
         });
       }
 
       // Seed investment transactions (Ledger de investimentos - Etapa 9)
-      for (const itx of investmentTransactions) {
-        const ref = doc(db, 'users', uid, 'investmentTransactions', itx.id);
-        batch.set(ref, {
-          assetId: itx.assetId,
-          type: itx.type,
-          date: itx.date,
-          quantity: itx.quantity,
-          price: itx.price,
-          totalAmount: itx.totalAmount,
-          ...(itx.notes ? { notes: itx.notes } : {}),
-          userId: uid,
-          createdAt: itx.createdAt
+      for (const itx of targetInvestmentTxs) {
+        items.push({
+          ref: doc(db, 'users', uid, 'investmentTransactions', itx.id),
+          data: {
+            assetId: itx.assetId,
+            type: itx.type,
+            date: itx.date,
+            quantity: itx.quantity,
+            price: itx.price,
+            totalAmount: itx.totalAmount,
+            ...(itx.notes ? { notes: itx.notes } : {}),
+            userId: uid,
+            createdAt: itx.createdAt
+          }
         });
       }
 
-      await batch.commit();
+      for (let i = 0; i < items.length; i += 400) {
+        const chunk = items.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach(item => batch.set(item.ref, item.data));
+        await batch.commit();
+      }
     } catch (err) {
       console.error('Error syncing user cloud data:', err);
+      throw err;
     }
   };
 
@@ -886,9 +948,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const computedGoals = useMemo(() => {
     return goals.map(goal => {
       const movements = goalMovements.filter(m => m.goalId === goal.id);
-      const initial = typeof goal.initialAmount === 'number'
-        ? goal.initialAmount
-        : (typeof goal.currentAmount === 'number' ? goal.currentAmount : 0);
+      const initial = resolveGoalInitialAmount(goal, movements);
       const derivedBalance = calculateGoalBalance(initial, movements);
       return {
         ...goal,
@@ -1195,14 +1255,13 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const targetGoal = goals.find(g => g.id === movement.goalId);
     if (targetGoal) {
       const remainingMovements = goalMovements.filter(m => m.goalId === movement.goalId);
-      const initial = typeof targetGoal.initialAmount === 'number'
-        ? targetGoal.initialAmount
-        : (typeof targetGoal.currentAmount === 'number' ? targetGoal.currentAmount : 0);
+      const initial = resolveGoalInitialAmount(targetGoal, remainingMovements);
       const updatedBalance = calculateGoalBalance(initial, [...remainingMovements, newMovement]);
       
-      setGoals(prev => prev.map(g => g.id === targetGoal.id ? { ...g, currentAmount: updatedBalance } : g));
+      setGoals(prev => prev.map(g => g.id === targetGoal.id ? { ...g, initialAmount: initial, currentAmount: updatedBalance } : g));
       if (currentUser) {
         await executeSync('goals', targetGoal.id, 'update', {
+          initialAmount: initial,
           currentAmount: updatedBalance,
           userId: currentUser.uid
         });
@@ -1250,13 +1309,12 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       const goal = goals.find(g => g.id === target.goalId);
       if (goal) {
         const remainingMovements = goalMovements.filter(m => m.goalId === target.goalId && m.id !== id);
-        const initial = typeof goal.initialAmount === 'number'
-          ? goal.initialAmount
-          : (typeof goal.currentAmount === 'number' ? goal.currentAmount : 0);
+        const initial = resolveGoalInitialAmount(goal, remainingMovements);
         const updatedBalance = calculateGoalBalance(initial, remainingMovements);
-        setGoals(prev => prev.map(g => g.id === goal.id ? { ...g, currentAmount: updatedBalance } : g));
+        setGoals(prev => prev.map(g => g.id === goal.id ? { ...g, initialAmount: initial, currentAmount: updatedBalance } : g));
         if (currentUser) {
           await executeSync('goals', goal.id, 'update', {
+            initialAmount: initial,
             currentAmount: updatedBalance,
             userId: currentUser.uid
           });
@@ -1778,11 +1836,24 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       localStorage.setItem(DEMO_CLEARED_KEY, 'true');
 
+      const importedMovements: GoalMovement[] = payload.goalMovements || [];
+      const normalizedGoals: FinancialGoal[] | undefined = payload.goals
+        ? payload.goals.map((g: FinancialGoal) => {
+            const movs = importedMovements.filter((m: GoalMovement) => m.goalId === g.id);
+            const initial = resolveGoalInitialAmount(g, movs);
+            return {
+              ...g,
+              initialAmount: initial,
+              currentAmount: calculateGoalBalance(initial, movs)
+            };
+          })
+        : undefined;
+
       if (payload.categories) setCategories(payload.categories);
       if (payload.accounts) setAccounts(payload.accounts);
       if (payload.creditCards) setCreditCards(payload.creditCards);
       if (payload.budgets) setBudgets(payload.budgets);
-      if (payload.goals) setGoals(payload.goals);
+      if (normalizedGoals) setGoals(normalizedGoals);
       if (payload.goalMovements) setGoalMovements(payload.goalMovements);
       if (payload.installmentPlans) setInstallmentPlans(payload.installmentPlans);
       if (payload.transactions) setTransactions(payload.transactions);
@@ -1791,7 +1862,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (payload.currency) setCurrencyState(payload.currency);
 
       if (currentUser) {
-        await seedInitialDataToCloud(currentUser.uid);
+        await seedInitialDataToCloud(currentUser.uid, {
+          categories: payload.categories,
+          accounts: payload.accounts,
+          creditCards: payload.creditCards,
+          budgets: payload.budgets,
+          goals: normalizedGoals,
+          goalMovements: payload.goalMovements,
+          installmentPlans: payload.installmentPlans,
+          transactions: payload.transactions,
+          investments: payload.investments,
+          investmentTransactions: payload.investmentTransactions
+        });
       }
 
       return { success: true, message: 'Backup restaurado com sucesso! Seus dados foram atualizados.' };
@@ -1801,9 +1883,271 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
+  /**
+   * Remove documentos de subcoleções do usuário no Firestore em lotes de até 400 escritas.
+   * Permite filtrar quais documentos apagar (ex: apenas dados de exemplo em clearSampleData).
+   */
+  const deleteSubcollectionsFromFirestore = async (
+    uid: string,
+    subcollections: readonly string[],
+    filterFn?: (sub: string, docId: string) => boolean
+  ): Promise<void> => {
+    for (const sub of subcollections) {
+      const snap = await getDocs(collection(db, 'users', uid, sub));
+      if (snap.empty) continue;
+      let docsToDelete = snap.docs;
+      if (filterFn) {
+        docsToDelete = docsToDelete.filter(d => filterFn(sub, d.id));
+      }
+      if (docsToDelete.length === 0) continue;
+      for (let i = 0; i < docsToDelete.length; i += 400) {
+        const chunk = docsToDelete.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+    }
+  };
+
+  /**
+   * Grava determinística e estritamente os dados padrão no Firestore (Etapa 9.6A).
+   * Garante que initialAmount das metas seja persistido e que coleções sejam salvas em lotes seguros.
+   */
+  const seedDefaultsToCloud = async (uid: string): Promise<void> => {
+    const items: { ref: any; data: any }[] = [];
+
+    for (const cat of DEFAULT_CATEGORIES) {
+      items.push({
+        ref: doc(db, 'users', uid, 'categories', cat.id),
+        data: {
+          name: cat.name,
+          icon: cat.icon,
+          color: cat.color,
+          type: cat.type,
+          userId: uid
+        }
+      });
+    }
+
+    for (const acc of INITIAL_ACCOUNTS) {
+      items.push({
+        ref: doc(db, 'users', uid, 'accounts', acc.id),
+        data: {
+          name: acc.name,
+          bankName: acc.bankName,
+          type: acc.type,
+          color: acc.color,
+          initialBalance: acc.initialBalance,
+          currentBalance: acc.currentBalance,
+          icon: acc.icon,
+          userId: uid
+        }
+      });
+    }
+
+    for (const card of INITIAL_CREDIT_CARDS) {
+      items.push({
+        ref: doc(db, 'users', uid, 'creditCards', card.id),
+        data: {
+          name: card.name,
+          bankName: card.bankName,
+          color: card.color,
+          limit: card.limit,
+          closingDay: card.closingDay,
+          dueDay: card.dueDay,
+          currentInvoice: card.currentInvoice,
+          userId: uid
+        }
+      });
+    }
+
+    for (const b of INITIAL_BUDGETS) {
+      items.push({
+        ref: doc(db, 'users', uid, 'budgets', b.id),
+        data: {
+          categoryId: b.categoryId,
+          month: b.month,
+          limitAmount: b.limitAmount,
+          userId: uid
+        }
+      });
+    }
+
+    for (const g of INITIAL_GOALS) {
+      const movements = INITIAL_GOAL_MOVEMENTS.filter(m => m.goalId === g.id);
+      const initial = resolveGoalInitialAmount(g, movements);
+      const balance = calculateGoalBalance(initial, movements);
+      items.push({
+        ref: doc(db, 'users', uid, 'goals', g.id),
+        data: {
+          name: g.name,
+          targetAmount: g.targetAmount,
+          initialAmount: initial,
+          currentAmount: balance,
+          targetDate: g.targetDate,
+          color: g.color,
+          icon: g.icon,
+          notes: g.notes || '',
+          userId: uid
+        }
+      });
+    }
+
+    for (const mov of INITIAL_GOAL_MOVEMENTS) {
+      items.push({
+        ref: doc(db, 'users', uid, 'goalMovements', mov.id),
+        data: {
+          goalId: mov.goalId,
+          type: mov.type,
+          amount: mov.amount,
+          date: mov.date,
+          createdAt: mov.createdAt,
+          ...(mov.notes ? { notes: mov.notes } : {}),
+          userId: uid
+        }
+      });
+    }
+
+    for (const p of INITIAL_INSTALLMENT_PLANS) {
+      items.push({
+        ref: doc(db, 'users', uid, 'installmentPlans', p.id),
+        data: {
+          description: p.description,
+          totalAmount: p.totalAmount,
+          installmentAmount: p.installmentAmount,
+          totalInstallments: p.totalInstallments,
+          type: p.type,
+          categoryId: p.categoryId || 'cat-compras',
+          accountId: p.accountId,
+          creditCardId: p.creditCardId || '',
+          paymentMethod: p.paymentMethod,
+          startDate: p.startDate,
+          userId: uid,
+          createdAt: p.createdAt
+        }
+      });
+    }
+
+    for (const tx of INITIAL_TRANSACTIONS) {
+      items.push({
+        ref: doc(db, 'users', uid, 'transactions', tx.id),
+        data: {
+          description: tx.description,
+          amount: tx.amount,
+          type: tx.type,
+          categoryId: tx.categoryId,
+          accountId: tx.accountId,
+          targetAccountId: tx.targetAccountId || '',
+          creditCardId: tx.creditCardId || '',
+          paymentMethod: tx.paymentMethod,
+          date: tx.date,
+          status: tx.status,
+          notes: tx.notes || '',
+          isRecurring: !!tx.isRecurring,
+          ...(tx.installmentPlanId ? { installmentPlanId: tx.installmentPlanId } : {}),
+          ...(tx.installments ? { installments: tx.installments } : {}),
+          userId: uid,
+          createdAt: tx.createdAt
+        }
+      });
+    }
+
+    for (const inv of INITIAL_INVESTMENTS) {
+      items.push({
+        ref: doc(db, 'users', uid, 'investments', inv.id),
+        data: {
+          ticker: inv.ticker,
+          name: inv.name,
+          type: inv.type,
+          quantity: inv.quantity,
+          averagePrice: inv.averagePrice,
+          currentPrice: inv.currentPrice,
+          currency: inv.currency,
+          autoUpdate: !!inv.autoUpdate,
+          ...(inv.previousClose !== undefined ? { previousClose: inv.previousClose } : {}),
+          ...(inv.changePercent !== undefined ? { changePercent: inv.changePercent } : {}),
+          ...(inv.institution ? { institution: inv.institution } : {}),
+          ...(inv.lastPriceUpdate ? { lastPriceUpdate: inv.lastPriceUpdate } : {}),
+          ...(inv.notes ? { notes: inv.notes } : {}),
+          userId: uid,
+          createdAt: inv.createdAt
+        }
+      });
+    }
+
+    for (const itx of INITIAL_INVESTMENT_TRANSACTIONS) {
+      items.push({
+        ref: doc(db, 'users', uid, 'investmentTransactions', itx.id),
+        data: {
+          assetId: itx.assetId,
+          type: itx.type,
+          date: itx.date,
+          quantity: itx.quantity,
+          price: itx.price,
+          totalAmount: itx.totalAmount,
+          ...(itx.notes ? { notes: itx.notes } : {}),
+          userId: uid,
+          createdAt: itx.createdAt
+        }
+      });
+    }
+
+    for (let i = 0; i < items.length; i += 400) {
+      const chunk = items.slice(i, i + 400);
+      const batch = writeBatch(db);
+      chunk.forEach(item => batch.set(item.ref, item.data));
+      await batch.commit();
+    }
+  };
+
   const resetToDefaults = async () => {
+    const subcollections: readonly SyncCollection[] = [
+      'transactions',
+      'accounts',
+      'creditCards',
+      'categories',
+      'budgets',
+      'goals',
+      'goalMovements',
+      'installmentPlans',
+      'investments',
+      'investmentTransactions'
+    ];
+
+    if (currentUser) {
+      const uid = currentUser.uid;
+      try {
+        setSyncStatus('pending');
+        // Remove determinística e estritamente todos os documentos anteriores do usuário no Firestore
+        await deleteSubcollectionsFromFirestore(uid, subcollections);
+        // Grava determinística e estritamente os dados padrão canônicos
+        await seedDefaultsToCloud(uid);
+        setSyncStatus('synced');
+        setSyncError(null);
+      } catch (err: unknown) {
+        console.error('Falha ao restaurar dados padrão no Firestore:', err);
+        setSyncStatus('error');
+        const msg = err instanceof Error ? err.message : 'Falha ao restaurar dados padrão na nuvem.';
+        setSyncError(msg);
+        throw new Error(`Não foi possível restaurar os dados padrão na nuvem: ${msg}`);
+      }
+    }
+
+    setPendingQueue([]);
+    savePendingQueueToStorage([]);
+
     localStorage.removeItem(DEMO_CLEARED_KEY);
     localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'categories', JSON.stringify(DEFAULT_CATEGORIES));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'accounts', JSON.stringify(INITIAL_ACCOUNTS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'credit_cards', JSON.stringify(INITIAL_CREDIT_CARDS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'budgets', JSON.stringify(INITIAL_BUDGETS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify(INITIAL_GOALS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify(INITIAL_GOAL_MOVEMENTS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify(INITIAL_INSTALLMENT_PLANS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify(INITIAL_TRANSACTIONS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(INITIAL_INVESTMENTS));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(INITIAL_INVESTMENT_TRANSACTIONS));
 
     setCategories(DEFAULT_CATEGORIES);
     setAccounts(INITIAL_ACCOUNTS);
@@ -1817,55 +2161,109 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setInvestmentTransactions(INITIAL_INVESTMENT_TRANSACTIONS);
     setCurrencyState('BRL');
     setSelectedMonth(getCurrentMonth());
-
-    if (currentUser) {
-      await seedInitialDataToCloud(currentUser.uid);
-    }
   };
 
   // Clears all sample/mock data so the user can start from clean scratch
   const clearSampleData = async () => {
-    localStorage.setItem(DEMO_CLEARED_KEY, 'true');
-    localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'accounts', JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'credit_cards', JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'budgets', JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify([]));
-
-    setAccounts([]);
-    setCreditCards([]);
-    setBudgets([]);
-    setGoals([]);
-    setGoalMovements([]);
-    setInstallmentPlans([]);
-    setTransactions([]);
-    setInvestments([]);
-    setInvestmentTransactions([]);
+    const subcollections: readonly SyncCollection[] = [
+      'transactions',
+      'accounts',
+      'creditCards',
+      'categories',
+      'budgets',
+      'goals',
+      'goalMovements',
+      'installmentPlans',
+      'investments',
+      'investmentTransactions'
+    ];
 
     if (currentUser) {
       const uid = currentUser.uid;
-      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans', 'investments', 'investmentTransactions'];
-      for (const sub of subcollections) {
-        try {
-          const snap = await getDocs(collection(db, 'users', uid, sub));
-          if (!snap.empty) {
-            const batch = writeBatch(db);
-            snap.docs.forEach(d => batch.delete(d.ref));
-            await batch.commit();
-          }
-        } catch (err) {
-          console.error(`Error deleting ${sub} from cloud:`, err);
-        }
+      try {
+        setSyncStatus('pending');
+        await deleteSubcollectionsFromFirestore(uid, subcollections, isSampleDataDocument);
+        setSyncStatus('synced');
+        setSyncError(null);
+      } catch (err: unknown) {
+        console.error('Falha ao remover dados de exemplo no Firestore:', err);
+        setSyncStatus('error');
+        const msg = err instanceof Error ? err.message : 'Falha ao remover dados de exemplo na nuvem.';
+        setSyncError(msg);
+        throw new Error(`Não foi possível remover dados de exemplo na nuvem: ${msg}`);
       }
     }
+
+    // Filtra preservando estritamente os dados reais do usuário
+    const filteredAccounts = filterOutSampleData('accounts', accounts);
+    const filteredCards = filterOutSampleData('creditCards', creditCards);
+    const filteredBudgets = filterOutSampleData('budgets', budgets);
+    const filteredGoals = filterOutSampleData('goals', goals);
+    const filteredGoalMovements = filterOutSampleData('goalMovements', goalMovements);
+    const filteredPlans = filterOutSampleData('installmentPlans', installmentPlans);
+    const filteredTransactions = filterOutSampleData('transactions', transactions);
+    const filteredInvestments = filterOutSampleData('investments', investments);
+    const filteredInvestmentTxs = filterOutSampleData('investmentTransactions', investmentTransactions);
+
+    // Remove da fila pendente quaisquer operações relativas aos dados de demonstração
+    setPendingQueue(prev => prev.filter(op => !isSampleDataDocument(op.collection, op.docId)));
+
+    localStorage.setItem(DEMO_CLEARED_KEY, 'true');
+    localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'accounts', JSON.stringify(filteredAccounts));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'credit_cards', JSON.stringify(filteredCards));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'budgets', JSON.stringify(filteredBudgets));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify(filteredGoals));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify(filteredGoalMovements));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify(filteredPlans));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify(filteredTransactions));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(filteredInvestments));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(filteredInvestmentTxs));
+
+    setAccounts(filteredAccounts);
+    setCreditCards(filteredCards);
+    setBudgets(filteredBudgets);
+    setGoals(filteredGoals);
+    setGoalMovements(filteredGoalMovements);
+    setInstallmentPlans(filteredPlans);
+    setTransactions(filteredTransactions);
+    setInvestments(filteredInvestments);
+    setInvestmentTransactions(filteredInvestmentTxs);
   };
 
   const clearAllData = async () => {
+    const subcollections: readonly SyncCollection[] = [
+      'transactions',
+      'accounts',
+      'creditCards',
+      'categories',
+      'budgets',
+      'goals',
+      'goalMovements',
+      'installmentPlans',
+      'investments',
+      'investmentTransactions'
+    ];
+
+    if (currentUser) {
+      const uid = currentUser.uid;
+      try {
+        setSyncStatus('pending');
+        await deleteSubcollectionsFromFirestore(uid, subcollections);
+        setSyncStatus('synced');
+        setSyncError(null);
+      } catch (err: unknown) {
+        console.error('Falha ao apagar dados no Firestore durante clearAllData:', err);
+        setSyncStatus('error');
+        const msg = err instanceof Error ? err.message : 'Falha ao apagar dados na nuvem.';
+        setSyncError(msg);
+        throw new Error(`Não foi possível apagar os dados na nuvem: ${msg}`);
+      }
+    }
+
+    setPendingQueue([]);
+    savePendingQueueToStorage([]);
+
     localStorage.setItem(DEMO_CLEARED_KEY, 'true');
     localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
     localStorage.setItem(STORAGE_KEY_PREFIX + 'categories', JSON.stringify(DEFAULT_CATEGORIES));
@@ -1889,23 +2287,6 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions([]);
     setInvestments([]);
     setInvestmentTransactions([]);
-
-    if (currentUser) {
-      const uid = currentUser.uid;
-      const subcollections = ['transactions', 'accounts', 'creditCards', 'budgets', 'goals', 'goalMovements', 'installmentPlans', 'investments', 'investmentTransactions'];
-      for (const sub of subcollections) {
-        try {
-          const snap = await getDocs(collection(db, 'users', uid, sub));
-          if (!snap.empty) {
-            const batch = writeBatch(db);
-            snap.docs.forEach(d => batch.delete(d.ref));
-            await batch.commit();
-          }
-        } catch (err) {
-          console.error(`Error clearing ${sub} from cloud:`, err);
-        }
-      }
-    }
   };
 
   return (
