@@ -494,9 +494,6 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'accounts', JSON.stringify(accounts));
-    replaceCollection('accounts', accounts).catch(err => {
-      console.warn('[FinFlow IndexedDB] Erro ao sincronizar accounts no IndexedDB:', err);
-    });
   }, [accounts]);
 
   useEffect(() => {
@@ -1275,7 +1272,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
-  // Account CRUD
+  // Account CRUD (Etapa 2.5 - ACCOUNTS Local-First)
   const addAccount = async (acc: Omit<Account, 'id' | 'currentBalance'>) => {
     const newId = generateId('acc');
     const newAcc: Account = {
@@ -1284,40 +1281,36 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       currentBalance: acc.initialBalance
     };
 
-    setAccounts(prev => [...prev, newAcc]);
+    // 1. Primeiro: persiste localmente e enfileira na SyncQueue
+    await financialSyncService.saveAccount(newAcc);
 
-    if (currentUser) {
-      await executeSync('accounts', newId, 'set', {
-        name: acc.name,
-        bankName: acc.bankName,
-        type: acc.type,
-        color: acc.color,
-        initialBalance: acc.initialBalance,
-        currentBalance: acc.initialBalance,
-        icon: acc.icon,
-        userId: currentUser.uid
-      });
-    }
+    // 2. Depois: reflete no estado React para a UI
+    setAccounts(prev => [...prev, newAcc]);
   };
 
   const updateAccount = async (id: string, updatedFields: Partial<Account>) => {
-    setAccounts(prev => prev.map(acc => acc.id === id ? { ...acc, ...updatedFields } : acc));
+    const currentAcc = accounts.find(acc => acc.id === id);
+    const updatedAcc: Account = {
+      ...(currentAcc || { id }),
+      ...updatedFields
+    } as Account;
 
-    if (currentUser) {
-      await executeSync('accounts', id, 'update', {
-        ...updatedFields,
-        userId: currentUser.uid
-      });
-    }
+    // 1. Primeiro: persiste atualização no repositório local e enfileira
+    await financialSyncService.saveAccount(updatedAcc);
+
+    // 2. Depois: reflete no estado React
+    setAccounts(prev => prev.map(acc => acc.id === id ? updatedAcc : acc));
   };
 
   const deleteAccount = async (id: string) => {
     localStorage.setItem(DEMO_CLEARED_KEY, 'true');
-    setAccounts(prev => prev.filter(acc => acc.id !== id));
 
-    if (currentUser) {
-      await executeSync('accounts', id, 'delete');
-    }
+    // 1. Primeiro: aplica soft-delete / tombstone no repositório local e enfileira
+    // Preserva integridade referencial: nunca remove fisicamente dados para preservar histórico de transações vinculadas
+    await financialSyncService.deleteAccount(id);
+
+    // 2. Depois: remove da visualização em memória da UI
+    setAccounts(prev => prev.filter(acc => acc.id !== id));
   };
 
   // Credit Card CRUD

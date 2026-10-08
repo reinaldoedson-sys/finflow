@@ -206,6 +206,52 @@ export class FinancialSyncService {
       entityId: account.id,
       action: 'create',
       payload: account,
+      revision: (account as any).revision || 1,
+    });
+
+    this.setStatus('pending');
+    this.triggerBackgroundProcessing();
+  }
+
+  async deleteAccount(id: string, opId?: string): Promise<void> {
+    const operationId = opId || `op_acc_del_${id}_${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const existing = await this.repos.accounts.getById(id, true);
+    const tombstoneRevision = ((existing as any)?.tombstoneRevision || 1) + 1;
+
+    const tombstone: TombstoneMetadata = {
+      deleted: true,
+      deletedAt: now,
+      tombstoneRevision,
+    };
+
+    // Soft delete / tombstone no repositório local sem exclusão física imediata
+    // Preserva integridade referencial para transações vinculadas à conta
+    if (existing) {
+      await this.repos.accounts.save({
+        ...existing,
+        deleted: true,
+        deletedAt: now,
+        tombstoneRevision,
+      } as any);
+    } else {
+      await this.repos.accounts.save({
+        id,
+        deleted: true,
+        deletedAt: now,
+        tombstoneRevision,
+      } as any);
+    }
+
+    // Enfileira com soft delete / tombstone
+    await this.queue.enqueue({
+      operationId,
+      entityName: 'accounts',
+      entityId: id,
+      action: 'delete',
+      tombstone,
+      revision: tombstoneRevision,
     });
 
     this.setStatus('pending');

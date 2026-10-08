@@ -227,7 +227,34 @@ async function runTests() {
   const deletedAcc2 = await accountRepo.getById('acc_2');
   assert(deletedAcc2 === null, 'acc_2 deve ter sido deletado');
   const accountsTotal = await accountRepo.count();
-  assert(accountsTotal === 1, 'Deveria restar apenas 1 conta');
+  assert(accountsTotal === 1, 'Deveria restar apenas 1 conta ativa');
+
+  // Teste de exclusão lógica (tombstone) e integridade referencial (Etapa 2.5)
+  await accountRepo.save({
+    ...acc1,
+    deleted: true,
+    deletedAt: new Date().toISOString(),
+    tombstoneRevision: 2,
+  } as any);
+
+  const activeAcc1 = await accountRepo.getById('acc_1');
+  assert(activeAcc1 === null, 'acc_1 tombstoned não deve ser retornado por getById ativo');
+
+  const rawAcc1 = await accountRepo.getById('acc_1', true);
+  assert(rawAcc1 !== null, 'acc_1 tombstoned deve permanecer acessível internamente com includeDeleted=true');
+  assert((rawAcc1 as any).deleted === true, 'Flag deleted deve ser true');
+
+  const allActive = await accountRepo.getAll();
+  assert(allActive.length === 0, 'Nenhuma conta ativa deve ser retornada após tombstone');
+
+  const allWithDeleted = await accountRepo.getAll(true);
+  assert(allWithDeleted.length >= 1, 'getAll(true) deve retornar conta tombstoned');
+
+  const activeCount = await accountRepo.count();
+  assert(activeCount === 0, 'count ativo deve ser 0');
+
+  const totalRawCount = await accountRepo.count(true);
+  assert(totalRawCount >= 1, 'count(true) deve incluir tombstoned');
 
   // =========================================================================
   // 3. Testes de IndexedDBCreditCardRepository

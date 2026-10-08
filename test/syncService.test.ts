@@ -287,6 +287,49 @@ async function runTests() {
   assert(pushedItems[0].entityId === 'tx_svc_1', 'ID da entidade enviada deve bater');
   assert((await queue.count()) === 0, 'Fila deve estar vazia após envio com sucesso');
 
+  // Testes de Contas Local-First (Etapa 2.5)
+  console.log('  -> Testando saveAccount no FinancialSyncService...');
+  await syncService.saveAccount({
+    id: 'acc_local_1',
+    name: 'Conta Inter',
+    type: 'checking',
+    bankName: 'Inter',
+    color: '#ff7a00',
+    initialBalance: 50000,
+    currentBalance: 50000,
+    icon: 'wallet',
+  });
+
+  const localSavedAcc = await accountRepo.getById('acc_local_1');
+  assert(localSavedAcc !== null, 'Conta deve ter sido salva no IndexedDB');
+  assert(localSavedAcc!.name === 'Conta Inter', 'Nome da conta deve bater');
+
+  // Snapshot de saldo local (não gera mutação na fila)
+  console.log('  -> Testando saveAccountBalanceSnapshot (cache local sem sujar fila)...');
+  await syncService.saveAccountBalanceSnapshot('acc_local_1', 62000);
+  const snapAcc = await accountRepo.getById('acc_local_1');
+  assert(snapAcc!.currentBalance === 62000, 'Snapshot de saldo deve ser atualizado no IndexedDB');
+  assert((await queue.count()) === 1, 'Fila deve conter apenas a criação da conta, snapshot não deve enfileirar');
+
+  // Sincroniza criação da conta
+  await syncService.processQueue();
+  assert((await queue.count()) === 0, 'Fila deve zerar após sincronizar criação');
+
+  // Soft-delete / tombstone de conta
+  console.log('  -> Testando deleteAccount (tombstone e preservação referencial)...');
+  await syncService.deleteAccount('acc_local_1');
+  const activeAccAfterDelete = await accountRepo.getById('acc_local_1');
+  assert(activeAccAfterDelete === null, 'Conta deletada não deve aparecer em consultas ativas');
+
+  const tombstoneAcc = await accountRepo.getById('acc_local_1', true);
+  assert(tombstoneAcc !== null, 'Registro tombstone deve existir no IndexedDB');
+  assert((tombstoneAcc as any).deleted === true, 'Flag deleted deve ser true');
+  assert((tombstoneAcc as any).deletedAt !== undefined, 'deletedAt deve estar preenchido');
+
+  assert((await queue.count()) === 1, 'Fila deve ter 1 operação de exclusão');
+  await syncService.processQueue();
+  assert((await queue.count()) === 0, 'Fila deve zerar após sincronizar exclusão');
+
   console.log('\n======================================================');
   console.log('✅ TODOS OS TESTES DA ETAPA 2.3 FORAM APROVADOS COM SUCESSO!');
   console.log('======================================================');
