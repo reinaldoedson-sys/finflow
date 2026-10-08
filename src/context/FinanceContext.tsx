@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 import { 
   Transaction, 
   Account, 
@@ -68,6 +68,18 @@ import {
 } from '../domain/investmentTransactions';
 import { calculateAportePosition } from '../domain/investments';
 import {
+  validateAporteParams,
+  prepareAportePlan,
+  checkAporteIdempotency,
+  ExecuteAporteParams
+} from '../domain/investmentAporte';
+import {
+  calculateAllEffectiveInvestmentPositions,
+  resolveAllEffectiveInvestments,
+  compareAssetWithLedger,
+  DerivedInvestmentPosition
+} from '../domain/investmentPosition';
+import {
   SyncStatus,
   PendingSyncOperation,
   SyncCollection,
@@ -93,6 +105,8 @@ interface FinanceContextType {
   installmentPlans: InstallmentPlan[];
   investments: InvestmentAsset[];
   investmentTransactions: InvestmentTransaction[];
+  computedInvestmentPositions: Record<string, DerivedInvestmentPosition>;
+  getDerivedPosition: (assetId: string) => DerivedInvestmentPosition | undefined;
   currency: CurrencyCode;
   selectedMonth: string;
   futureCommitments: MonthCommitment[];
@@ -130,7 +144,10 @@ interface FinanceContextType {
     date: string;
     sourceAccountId?: string;
     notes?: string;
-  }) => Promise<{ transactionId: string }>;
+    idempotencyKey?: string;
+    transactionId?: string;
+    debitTransactionId?: string;
+  }) => Promise<{ transactionId: string; debitTransactionId?: string }>;
 
   // Installment Plan Actions
   addInstallmentPlan: (plan: Omit<InstallmentPlan, 'id' | 'createdAt'>) => Promise<void>;
@@ -958,6 +975,43 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     });
   }, [goals, goalMovements]);
 
+  // Recalculate investment positions and effective assets from single source of truth (InvestmentTransaction ledger) (Etapa 10.2)
+  const computedInvestmentPositions = useMemo(() => {
+    const map = calculateAllEffectiveInvestmentPositions(investments, investmentTransactions);
+    const result: Record<string, DerivedInvestmentPosition> = {};
+    for (const [id, pos] of map.entries()) {
+      result[id] = pos;
+    }
+    return result;
+  }, [investments, investmentTransactions]);
+
+  const computedInvestments = useMemo(() => {
+    return resolveAllEffectiveInvestments(investments, investmentTransactions);
+  }, [investments, investmentTransactions]);
+
+  const getDerivedPosition = useCallback((assetId: string): DerivedInvestmentPosition | undefined => {
+    return computedInvestmentPositions[assetId];
+  }, [computedInvestmentPositions]);
+
+  // Auditoria interna em ambiente de desenvolvimento para detectar divergências entre dados armazenados e ledger (Etapa 10.2)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      for (const asset of investments) {
+        const derived = computedInvestmentPositions[asset.id];
+        if (derived && derived.hasLedger) {
+          const div = compareAssetWithLedger(asset, derived);
+          if (div.hasDivergence) {
+            console.info(
+              `[FinFlow Ledger Audit] Divergência detectada no ativo ${asset.ticker || asset.id}: ` +
+              `Armazenado (Qtd: ${div.storedQuantity}, PM: ${div.storedAveragePrice}) vs ` +
+              `Ledger (Qtd: ${div.derivedQuantity}, PM: ${div.derivedAveragePrice})`
+            );
+          }
+        }
+      }
+    }
+  }, [investments, computedInvestmentPositions]);
+
   // Monthly summary calculated via pure domain function
   const summary = useMemo(() => {
     return calculateMonthlySummary(computedAccounts, computedCreditCards, transactions, selectedMonth);
@@ -1713,10 +1767,12 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   /**
-   * Executa um aporte financeiro em um ativo de investimento:
-   * 1. Registra a operação no ledger ('buy') com precisão de centavos
-   * 2. Recalcula e atualiza a quantidade e o preço médio ponderado do ativo
-   * 3. Opcionalmente debita o valor da conta financeira selecionada
+   * Executa um aporte financeiro em um ativo de investimento (Etapa 9.6B):
+   * 1. Pré-validação estrita antes de tocar no estado local ou na nuvem
+   * 2. Preparação determinística e verificação de idempotência (previne duplicação em retry)
+   * 3. Atualização local coordenada com rollback de segurança
+   * 4. Persistência atômica via writeBatch no Firestore
+   * 5. Sincronização resiliente: em caso de falha de rede/nuvem, enfileira no Sync Engine
    */
   const executeInvestmentAporte = async (params: {
     assetId: string;
@@ -1725,63 +1781,175 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     date: string;
     sourceAccountId?: string;
     notes?: string;
-  }): Promise<{ transactionId: string }> => {
-    const targetAsset = investments.find(a => a.id === params.assetId);
-    if (!targetAsset) {
-      throw new Error(`Ativo com ID "${params.assetId}" não encontrado na carteira.`);
+    idempotencyKey?: string;
+    transactionId?: string;
+    debitTransactionId?: string;
+  }): Promise<{ transactionId: string; debitTransactionId?: string }> => {
+    // 1. Pré-validação completa antes de qualquer mutação
+    const validation = validateAporteParams(params, investments, accounts);
+    if (!validation.isValid) {
+      throw new Error(validation.error || 'Parâmetros de aporte inválidos.');
     }
 
-    if (params.quantity <= 0) {
-      throw new Error('A quantidade do aporte deve ser maior que zero.');
-    }
-    if (params.price <= 0) {
-      throw new Error('O preço unitário do aporte deve ser maior que zero.');
-    }
+    const targetAsset = investments.find(a => a.id === params.assetId)!;
+    const investCat = categories.find(c => 
+      c.id === 'cat-invest' || c.name.toLowerCase().includes('invest')
+    );
+    const categoryId = investCat ? investCat.id : 'cat-outros';
 
-    const totalAmount = calculateTransactionTotal(params.quantity, params.price);
+    // 2. Prepara o plano com IDs estáveis e cálculos precisos
+    const plan = prepareAportePlan(params, targetAsset, categoryId);
 
-    // 1. Registra no ledger de operações de investimentos
-    const txId = await addInvestmentTransaction({
-      assetId: params.assetId,
-      type: 'buy',
-      date: params.date,
-      quantity: params.quantity,
-      price: params.price,
-      totalAmount,
-      notes: params.notes?.trim() || `Aporte de ${params.quantity} cotas em ${targetAsset.ticker}`
-    });
-
-    // 2. Atualiza a posição (quantidade e preço médio ponderado) do ativo
-    const { newQuantity, newAveragePrice } = calculateAportePosition(
-      { quantity: targetAsset.quantity, averagePrice: targetAsset.averagePrice },
-      { quantity: params.quantity, price: params.price }
+    // 3. Verificação de idempotência para evitar compras ou débitos duplicados em retry
+    const idempotency = checkAporteIdempotency(
+      plan.itxId,
+      plan.debitTxId,
+      targetAsset.id,
+      plan.newQuantity,
+      investmentTransactions,
+      transactions,
+      investments
     );
 
-    await updateInvestment(targetAsset.id, {
-      quantity: newQuantity,
-      averagePrice: newAveragePrice,
-      lastPriceUpdate: new Date().toISOString()
-    });
-
-    // 3. Se selecionou uma conta financeira para débito, gera a transação correspondente
-    if (params.sourceAccountId && params.sourceAccountId.trim().length > 0) {
-      const investCat = categories.find(c => 
-        c.id === 'cat-invest' || c.name.toLowerCase().includes('invest')
-      );
-      await addTransaction({
-        description: `Aporte - ${targetAsset.ticker} (${params.quantity} cotas)`,
-        amount: totalAmount,
-        type: 'expense',
-        accountId: params.sourceAccountId,
-        categoryId: investCat ? investCat.id : 'cat-outros',
-        paymentMethod: 'transfer',
-        date: params.date,
-        status: 'completed',
-        notes: `Aporte de ${params.quantity} cotas a ${params.price} em ${targetAsset.ticker}. Operação: ${txId}`
-      });
+    if (idempotency.alreadyFullyExecuted) {
+      return { transactionId: plan.itxId, debitTransactionId: plan.debitTxId };
     }
 
-    return { transactionId: txId };
+    // 4. Snapshots locais para permitir rollback se houver falha local
+    const prevInvestments = investments;
+    const prevInvestmentTxs = investmentTransactions;
+    const prevTransactions = transactions;
+
+    try {
+      // Atualiza o estado local de forma coordenada
+      const nextInvestmentTxs = !idempotency.itxExists
+        ? [plan.newInvestmentTransaction, ...prevInvestmentTxs.filter(t => t.id !== plan.itxId)]
+        : prevInvestmentTxs;
+
+      const nextInvestments = !idempotency.assetAlreadyUpdated
+        ? prevInvestments.map(inv => inv.id === targetAsset.id ? plan.updatedAsset : inv)
+        : prevInvestments;
+
+      const nextTransactions = (plan.newDebitTransaction && !idempotency.debitExists)
+        ? [plan.newDebitTransaction, ...prevTransactions.filter(t => t.id !== plan.debitTxId)]
+        : prevTransactions;
+
+      setInvestmentTransactions(nextInvestmentTxs);
+      setInvestments(nextInvestments);
+      if (plan.newDebitTransaction && !idempotency.debitExists) {
+        setTransactions(nextTransactions);
+      }
+
+      // Persistência coordenada no localStorage
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(nextInvestmentTxs));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(nextInvestments));
+      if (plan.newDebitTransaction) {
+        localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify(nextTransactions));
+      }
+    } catch (localErr) {
+      // Rollback local em caso de erro inesperado
+      setInvestments(prevInvestments);
+      setInvestmentTransactions(prevInvestmentTxs);
+      setTransactions(prevTransactions);
+      throw new Error(`Falha ao registrar aporte localmente: ${localErr instanceof Error ? localErr.message : String(localErr)}`);
+    }
+
+    // 5. Persistência atômica no Firestore / Sincronização Cloud
+    if (currentUser) {
+      const uid = currentUser.uid;
+      const itxPayload = sanitizePayload({
+        ...plan.newInvestmentTransaction,
+        userId: uid
+      });
+      const assetPayload = sanitizePayload({
+        quantity: plan.newQuantity,
+        averagePrice: plan.newAveragePrice,
+        lastPriceUpdate: plan.updatedAsset.lastPriceUpdate,
+        userId: uid
+      });
+      const debitPayload = plan.newDebitTransaction
+        ? sanitizePayload({
+            description: plan.newDebitTransaction.description,
+            amount: plan.newDebitTransaction.amount,
+            type: plan.newDebitTransaction.type,
+            categoryId: plan.newDebitTransaction.categoryId,
+            accountId: plan.newDebitTransaction.accountId,
+            paymentMethod: plan.newDebitTransaction.paymentMethod,
+            date: plan.newDebitTransaction.date,
+            status: plan.newDebitTransaction.status,
+            notes: plan.newDebitTransaction.notes || '',
+            createdAt: plan.newDebitTransaction.createdAt,
+            userId: uid
+          })
+        : undefined;
+
+      try {
+        const batch = writeBatch(db);
+        if (!idempotency.itxExists) {
+          batch.set(doc(db, 'users', uid, 'investmentTransactions', plan.itxId), itxPayload);
+        }
+        if (!idempotency.assetAlreadyUpdated) {
+          batch.set(doc(db, 'users', uid, 'investments', targetAsset.id), assetPayload, { merge: true });
+        }
+        if (debitPayload && !idempotency.debitExists) {
+          batch.set(doc(db, 'users', uid, 'transactions', plan.debitTxId!), debitPayload);
+        }
+        await batch.commit();
+
+        setPendingQueue(prev => {
+          let next = dequeueOperation(prev, 'investmentTransactions', plan.itxId);
+          next = dequeueOperation(next, 'investments', targetAsset.id);
+          if (plan.debitTxId) {
+            next = dequeueOperation(next, 'transactions', plan.debitTxId);
+          }
+          if (next.length === 0) {
+            setSyncStatus('synced');
+            setSyncError(null);
+          }
+          return next;
+        });
+      } catch (cloudErr) {
+        const errMsg = cloudErr instanceof Error ? cloudErr.message : String(cloudErr);
+        console.warn('[FinFlow Sync] Falha ao sincronizar lote de aporte no Firestore:', errMsg);
+
+        setPendingQueue(prev => {
+          let next = prev;
+          if (!idempotency.itxExists) {
+            next = enqueueOperation(next, {
+              collection: 'investmentTransactions',
+              docId: plan.itxId,
+              type: 'set',
+              payload: itxPayload,
+              lastError: errMsg
+            });
+          }
+          if (!idempotency.assetAlreadyUpdated) {
+            next = enqueueOperation(next, {
+              collection: 'investments',
+              docId: targetAsset.id,
+              type: 'update',
+              payload: assetPayload,
+              lastError: errMsg
+            });
+          }
+          if (debitPayload && !idempotency.debitExists) {
+            next = enqueueOperation(next, {
+              collection: 'transactions',
+              docId: plan.debitTxId!,
+              type: 'set',
+              payload: debitPayload,
+              lastError: errMsg
+            });
+          }
+          return next;
+        });
+
+        setSyncStatus('error');
+        setSyncError('Aporte salvo localmente. Aguardando conexão para sincronizar com a nuvem.');
+      }
+    }
+
+    return { transactionId: plan.itxId, debitTransactionId: plan.debitTxId };
   };
 
   // Backup & Restore
@@ -2300,8 +2468,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         goals: computedGoals,
         goalMovements,
         installmentPlans,
-        investments,
+        investments: computedInvestments,
         investmentTransactions,
+        computedInvestmentPositions,
+        getDerivedPosition,
         currency,
         selectedMonth,
         futureCommitments,

@@ -9,6 +9,10 @@ import {
   calculateUnrealizedProfit 
 } from '../domain/investments';
 import { 
+  resolveEffectiveInvestmentPosition, 
+  calculateEffectiveInvestmentValue 
+} from '../domain/investmentPosition';
+import { 
   X, 
   TrendingUp, 
   Plus, 
@@ -63,31 +67,18 @@ export const InvestmentDetailModal: React.FC<InvestmentDetailModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<'all' | 'buys' | 'sells' | 'dividends'>('buys');
 
-  // Transactions specific to this asset
+  // Posição efetiva derivada do ledger (ou fallback legado seguro)
+  const derivedPos = useMemo(() => {
+    if (!asset) return null;
+    return resolveEffectiveInvestmentPosition(asset, investmentTransactions);
+  }, [asset, investmentTransactions]);
+
+  // Transações puras do ativo no ledger (sem inventar transações fictícias)
   const assetTransactions = useMemo(() => {
     if (!asset) return [];
-    const directTxs = investmentTransactions
+    return investmentTransactions
       .filter(tx => tx.assetId === asset.id)
       .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
-
-    const hasBuys = directTxs.some(t => t.type === 'buy');
-    if (!hasBuys && asset.quantity > 0) {
-      const initialDate = asset.createdAt ? asset.createdAt.split('T')[0] : '2026-01-01';
-      const syntheticInitial: InvestmentTransaction = {
-        id: `initial-pos-${asset.id}`,
-        assetId: asset.id,
-        type: 'buy',
-        date: initialDate,
-        quantity: asset.quantity,
-        price: asset.averagePrice,
-        totalAmount: Math.round(asset.quantity * asset.averagePrice * 100) / 100,
-        notes: asset.notes || 'Posição inicial de cadastro do ativo',
-        createdAt: asset.createdAt || new Date().toISOString()
-      };
-      return [syntheticInitial, ...directTxs];
-    }
-
-    return directTxs;
   }, [investmentTransactions, asset]);
 
   // Filtered by tab
@@ -99,44 +90,49 @@ export const InvestmentDetailModal: React.FC<InvestmentDetailModalProps> = ({
     return assetTransactions;
   }, [assetTransactions, activeTab]);
 
-  // Aggregate stats from transactions
+  // Métricas agregadas derivadas do motor de posição
   const txStats = useMemo(() => {
-    let totalBoughtAmount = 0;
-    let totalBoughtQty = 0;
-    let totalSoldAmount = 0;
-    let totalSoldQty = 0;
-    let totalDividends = 0;
-
-    for (const t of assetTransactions) {
-      if (t.type === 'buy') {
-        totalBoughtAmount += t.totalAmount;
-        totalBoughtQty += t.quantity;
-      } else if (t.type === 'sell') {
-        totalSoldAmount += t.totalAmount;
-        totalSoldQty += t.quantity;
-      } else if (t.type === 'dividend') {
-        totalDividends += t.totalAmount;
-      }
+    if (!derivedPos) {
+      return {
+        totalBoughtAmount: 0,
+        totalBoughtQty: 0,
+        totalSoldAmount: 0,
+        totalSoldQty: 0,
+        totalDividends: 0,
+        realizedProfitLoss: 0,
+        buysCount: 0,
+        sellsCount: 0,
+        dividendsCount: 0
+      };
     }
 
     return {
-      totalBoughtAmount,
-      totalBoughtQty,
-      totalSoldAmount,
-      totalSoldQty,
-      totalDividends,
+      totalBoughtAmount: derivedPos.totalBought,
+      totalBoughtQty: derivedPos.totalBoughtQuantity,
+      totalSoldAmount: derivedPos.totalSold,
+      totalSoldQty: derivedPos.totalSoldQuantity,
+      totalDividends: derivedPos.totalDividends,
+      realizedProfitLoss: derivedPos.realizedProfitLoss,
       buysCount: assetTransactions.filter(t => t.type === 'buy').length,
       sellsCount: assetTransactions.filter(t => t.type === 'sell').length,
       dividendsCount: assetTransactions.filter(t => t.type === 'dividend').length
     };
-  }, [assetTransactions]);
+  }, [derivedPos, assetTransactions]);
 
   if (!isOpen || !asset) return null;
 
   const meta = ASSET_TYPE_LABELS[asset.type] || ASSET_TYPE_LABELS.other;
-  const assetCost = calculateInvestmentCost(asset);
-  const assetValue = calculateInvestmentValue(asset);
-  const { profitLoss: assetProfit, profitLossPercent: assetProfitPercent } = calculateUnrealizedProfit(asset);
+  const effectiveQuantity = derivedPos ? derivedPos.quantity : asset.quantity;
+  const effectiveAveragePrice = derivedPos ? derivedPos.averagePrice : asset.averagePrice;
+  const assetCost = derivedPos ? derivedPos.totalCost : calculateInvestmentCost(asset);
+  const assetValue = derivedPos 
+    ? calculateEffectiveInvestmentValue(asset, derivedPos)
+    : calculateInvestmentValue(asset);
+  const { profitLoss: assetProfit, profitLossPercent: assetProfitPercent } = calculateUnrealizedProfit({
+    quantity: effectiveQuantity,
+    averagePrice: effectiveAveragePrice,
+    currentPrice: asset.currentPrice
+  });
   const hasChange = typeof asset.changePercent === 'number';
   const isPositiveChange = hasChange && (asset.changePercent || 0) >= 0;
 
@@ -209,7 +205,7 @@ export const InvestmentDetailModal: React.FC<InvestmentDetailModalProps> = ({
             <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
               <span className="text-[11px] text-slate-400 block font-medium">Quantidade Atual</span>
               <strong className="text-base sm:text-lg font-mono font-bold text-white block mt-0.5">
-                {asset.quantity.toLocaleString('pt-BR')} <span className="text-xs font-normal text-slate-400">cotas</span>
+                {effectiveQuantity.toLocaleString('pt-BR')} <span className="text-xs font-normal text-slate-400">cotas</span>
               </strong>
               <span className="text-[10px] text-slate-500">Posição acumulada</span>
             </div>
@@ -217,7 +213,7 @@ export const InvestmentDetailModal: React.FC<InvestmentDetailModalProps> = ({
             <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
               <span className="text-[11px] text-slate-400 block font-medium">Preço Médio Pago</span>
               <strong className="text-base sm:text-lg font-mono font-bold text-slate-200 block mt-0.5">
-                {formatCurrency(asset.averagePrice, asset.currency, hideValues)}
+                {formatCurrency(effectiveAveragePrice, asset.currency, hideValues)}
               </strong>
               <span className="text-[10px] text-slate-500">Custo ponderado</span>
             </div>

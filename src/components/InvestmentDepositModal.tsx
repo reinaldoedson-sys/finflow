@@ -49,12 +49,14 @@ export const InvestmentDepositModal: React.FC<InvestmentDepositModalProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submissionKey, setSubmissionKey] = useState<string>('');
 
   // Initialize form when modal opens
   useEffect(() => {
     if (isOpen) {
       setError(null);
       setIsSubmitting(false);
+      setSubmissionKey(Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 7));
       const defaultId = initialAssetId || (investments.length > 0 ? investments[0].id : '');
       setSelectedAssetId(defaultId);
       setDate(new Date().toISOString().split('T')[0]);
@@ -206,7 +208,8 @@ export const InvestmentDepositModal: React.FC<InvestmentDepositModalProps> = ({
         price: parsedPrice,
         date,
         sourceAccountId: debitFromAccount ? sourceAccountId : undefined,
-        notes: notes.trim() || undefined
+        notes: notes.trim() || undefined,
+        idempotencyKey: submissionKey
       });
 
       // Celebration confetti
