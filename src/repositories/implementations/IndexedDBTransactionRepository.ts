@@ -11,12 +11,13 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
 
   async getAll(): Promise<Transaction[]> {
     const items = await this.database.transactions.toArray();
-    return items.sort((a, b) => b.date.localeCompare(a.date));
+    return items.filter(t => !(t as any).deleted).sort((a, b) => b.date.localeCompare(a.date));
   }
 
   async getById(id: string): Promise<Transaction | null> {
     const item = await this.database.transactions.get(id);
-    return item ?? null;
+    if (!item || (item as any).deleted) return null;
+    return item;
   }
 
   async save(item: Transaction): Promise<void> {
@@ -46,7 +47,8 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
   }
 
   async count(): Promise<number> {
-    return this.database.transactions.count();
+    const items = await this.database.transactions.toArray();
+    return items.filter(t => !(t as any).deleted).length;
   }
 
   async getByDateRange(startDate?: string, endDate?: string): Promise<Transaction[]> {
@@ -61,7 +63,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
     }
 
     const items = await collection.toArray();
-    return items.sort((a, b) => {
+    return items.filter(t => !(t as any).deleted).sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
       return (b.id || '').localeCompare(a.id || '');
@@ -77,7 +79,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
       .between(start, end, true, true)
       .toArray();
 
-    return items.sort((a, b) => {
+    return items.filter(t => !(t as any).deleted).sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
       return (b.id || '').localeCompare(a.id || '');
@@ -90,7 +92,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
       .equals(accountId)
       .toArray();
 
-    return items.sort((a, b) => b.date.localeCompare(a.date));
+    return items.filter(t => !(t as any).deleted).sort((a, b) => b.date.localeCompare(a.date));
   }
 
   async getByCreditCardId(creditCardId: string): Promise<Transaction[]> {
@@ -99,7 +101,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
       .equals(creditCardId)
       .toArray();
 
-    return items.sort((a, b) => b.date.localeCompare(a.date));
+    return items.filter(t => !(t as any).deleted).sort((a, b) => b.date.localeCompare(a.date));
   }
 
   async getPaged(options: TransactionPagedOptions = {}): Promise<TransactionPagedResult> {

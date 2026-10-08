@@ -4,3 +4,4 @@ export * from './IndexedDBCreditCardRepository';
 export * from './IndexedDBInvestmentRepository';
 export * from './IndexedDBGoalRepository';
 export * from './IndexedDBBudgetRepository';
+export * from './IndexedDBSyncQueueRepository';

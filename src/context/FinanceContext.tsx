@@ -47,6 +47,19 @@ import {
   clearAllFinancialEntities,
 } from '../storage/indexedDB';
 import {
+  IndexedDBTransactionRepository,
+  IndexedDBAccountRepository,
+  IndexedDBCreditCardRepository,
+  IndexedDBInvestmentRepository,
+  IndexedDBGoalRepository,
+  IndexedDBBudgetRepository,
+  IndexedDBSyncQueueRepository,
+} from '../repositories/implementations';
+import { SyncQueue } from '../services/syncQueue';
+import { ConflictResolver } from '../services/conflictResolver';
+import { FinancialSyncService } from '../services/financialSyncService';
+import { FirestoreSyncProvider } from '../services/providers/FirestoreSyncProvider';
+import {
   queryTransactionsPaged,
   subscribeMonthTransactions,
   getMonthDateRange,
@@ -340,6 +353,38 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [isRefreshingQuotes, setIsRefreshingQuotes] = useState(false);
   const [lastQuotesUpdate, setLastQuotesUpdate] = useState<string | null>(null);
 
+  // Instâncias dos repositórios locais e serviços Local-First (Etapa 2.4 - TRANSACTIONS)
+  const transactionRepo = useMemo(() => new IndexedDBTransactionRepository(), []);
+  const accountRepo = useMemo(() => new IndexedDBAccountRepository(), []);
+  const creditCardRepo = useMemo(() => new IndexedDBCreditCardRepository(), []);
+  const investmentRepo = useMemo(() => new IndexedDBInvestmentRepository(), []);
+  const goalRepo = useMemo(() => new IndexedDBGoalRepository(), []);
+  const budgetRepo = useMemo(() => new IndexedDBBudgetRepository(), []);
+  const syncQueueRepo = useMemo(() => new IndexedDBSyncQueueRepository(), []);
+
+  const syncQueue = useMemo(() => new SyncQueue(syncQueueRepo), [syncQueueRepo]);
+  const conflictResolver = useMemo(() => new ConflictResolver(), []);
+  const cloudSyncProvider = useMemo(() => new FirestoreSyncProvider(currentUser?.uid), [currentUser?.uid]);
+
+  const financialSyncService = useMemo(() => new FinancialSyncService({
+    repositories: {
+      transactions: transactionRepo,
+      accounts: accountRepo,
+      creditCards: creditCardRepo,
+      investments: investmentRepo,
+      goals: goalRepo,
+      budgets: budgetRepo,
+    },
+    syncQueue,
+    conflictResolver,
+    cloudProvider: cloudSyncProvider,
+    autoProcessQueue: true,
+  }), [transactionRepo, accountRepo, creditCardRepo, investmentRepo, goalRepo, budgetRepo, syncQueue, conflictResolver, cloudSyncProvider]);
+
+  useEffect(() => {
+    cloudSyncProvider.setUserId(currentUser?.uid);
+  }, [currentUser, cloudSyncProvider]);
+
   // Set initial flag after first boot and run IndexedDB migration/hydration
   const isIndexedDBHydratedRef = React.useRef(false);
 
@@ -445,9 +490,6 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify(transactions));
-    replaceCollection('transactions', transactions).catch(err => {
-      console.warn('[FinFlow IndexedDB] Erro ao sincronizar transactions no IndexedDB:', err);
-    });
   }, [transactions]);
 
   useEffect(() => {
@@ -1126,7 +1168,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const goToCurrentMonth = () => setSelectedMonth(getCurrentMonth());
   const setCurrency = (c: CurrencyCode) => setCurrencyState(c);
 
-  // Transaction CRUD (Local + Firestore)
+  // Transaction CRUD (Local-First via FinancialSyncService & IndexedDBTransactionRepository - Etapa 2.4)
   const addTransaction = async (tx: Omit<Transaction, 'id' | 'createdAt'>) => {
     const newId = generateId('tx');
     const createdAt = new Date().toISOString();
@@ -1136,46 +1178,35 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       createdAt
     };
 
-    setTransactions(prev => [newTx, ...prev]);
+    // 1. Primeiro: persiste localmente e enfileira na SyncQueue
+    await financialSyncService.saveTransaction(newTx);
 
-    if (currentUser) {
-      await executeSync('transactions', newId, 'set', {
-        description: tx.description,
-        amount: tx.amount,
-        type: tx.type,
-        categoryId: tx.categoryId || 'cat-outros',
-        accountId: tx.accountId,
-        targetAccountId: tx.targetAccountId || '',
-        creditCardId: tx.creditCardId || '',
-        paymentMethod: tx.paymentMethod,
-        date: tx.date,
-        status: tx.status,
-        notes: tx.notes || '',
-        isRecurring: !!tx.isRecurring,
-        userId: currentUser.uid,
-        createdAt
-      });
-    }
+    // 2. Depois: reflete no estado React para a UI
+    setTransactions(prev => [newTx, ...prev]);
   };
 
   const updateTransaction = async (id: string, updatedFields: Partial<Transaction>) => {
-    setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, ...updatedFields } : tx));
+    const currentTx = transactions.find(t => t.id === id);
+    const updatedTx: Transaction = {
+      ...(currentTx || { id }),
+      ...updatedFields,
+    } as Transaction;
 
-    if (currentUser) {
-      await executeSync('transactions', id, 'update', {
-        ...updatedFields,
-        userId: currentUser.uid
-      });
-    }
+    // 1. Primeiro: persiste atualização no repositório local e enfileira
+    await financialSyncService.saveTransaction(updatedTx);
+
+    // 2. Depois: reflete no estado React
+    setTransactions(prev => prev.map(tx => tx.id === id ? updatedTx : tx));
   };
 
   const deleteTransaction = async (id: string) => {
     localStorage.setItem(DEMO_CLEARED_KEY, 'true');
-    setTransactions(prev => prev.filter(tx => tx.id !== id));
 
-    if (currentUser) {
-      await executeSync('transactions', id, 'delete');
-    }
+    // 1. Primeiro: aplica soft-delete / tombstone no repositório local e enfileira
+    await financialSyncService.deleteTransaction(id);
+
+    // 2. Depois: remove da visualização em memória
+    setTransactions(prev => prev.filter(tx => tx.id !== id));
   };
 
   const toggleTransactionStatus = async (id: string) => {
@@ -1185,7 +1216,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await updateTransaction(id, { status: newStatus });
   };
 
-  // Estado e cursor para paginação de histórico de transações sob demanda (startAfter)
+  // Estado e cursor para paginação de histórico de transações sob demanda (Cursor Pagination via Repository)
   const [historicalPagination, setHistoricalPagination] = useState<{
     hasMore: boolean;
     isLoading: boolean;
@@ -1193,7 +1224,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     hasMore: true,
     isLoading: false,
   });
-  const lastVisibleTxDocRef = React.useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const lastTxCursorRef = React.useRef<string | undefined>(undefined);
 
   const loadHistoricalTransactions = async (options?: {
     pageSize?: number;
@@ -1201,25 +1232,22 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     endDate?: string;
     reset?: boolean;
   }): Promise<{ count: number; hasMore: boolean }> => {
-    if (!currentUser) {
-      return { count: 0, hasMore: false };
-    }
-
     if (options?.reset) {
-      lastVisibleTxDocRef.current = null;
+      lastTxCursorRef.current = undefined;
     }
 
     setHistoricalPagination(prev => ({ ...prev, isLoading: true }));
 
     try {
-      const result = await queryTransactionsPaged(currentUser.uid, {
-        pageSize: options?.pageSize || 30,
-        startAfterDoc: lastVisibleTxDocRef.current,
+      // Consulta paginada via IndexedDBTransactionRepository usando cursor pagination
+      const result = await transactionRepo.getPaged({
+        cursor: lastTxCursorRef.current,
+        limit: options?.pageSize || 30,
         startDate: options?.startDate,
         endDate: options?.endDate,
       });
 
-      lastVisibleTxDocRef.current = result.lastVisible;
+      lastTxCursorRef.current = result.nextCursor;
 
       if (result.items.length > 0) {
         setTransactions(prev => {
@@ -1241,7 +1269,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         hasMore: result.hasMore,
       };
     } catch (err) {
-      console.warn('[FinFlow Firestore] Falha ao paginar histórico de transações:', err);
+      console.warn('[FinFlow Repository] Falha ao paginar histórico de transações locais:', err);
       setHistoricalPagination(prev => ({ ...prev, isLoading: false }));
       return { count: 0, hasMore: false };
     }
@@ -1589,6 +1617,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
 
     setInstallmentPlans(prev => [newPlan, ...prev]);
+    // Persiste as novas transações de parcelas no IndexedDBTransactionRepository
+    await transactionRepo.saveBatch(newTransactions).catch(console.warn);
     setTransactions(prev => [...newTransactions, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
 
     if (currentUser) {
@@ -1691,6 +1721,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(DEMO_CLEARED_KEY, 'true');
     setInstallmentPlans(prev => prev.filter(p => p.id !== planId));
     if (deleteTransactions) {
+      const associated = transactions.filter(t => t.installmentPlanId === planId);
+      for (const t of associated) {
+        await transactionRepo.delete(t.id).catch(console.warn);
+      }
       setTransactions(prev => prev.filter(t => t.installmentPlanId !== planId));
     }
 
@@ -1998,6 +2032,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       setInvestmentTransactions(nextInvestmentTxs);
       setInvestments(nextInvestments);
       if (plan.newDebitTransaction && !idempotency.debitExists) {
+        await transactionRepo.save(plan.newDebitTransaction).catch(console.warn);
         setTransactions(nextTransactions);
       }
 
