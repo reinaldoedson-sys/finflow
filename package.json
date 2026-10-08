@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "test": "tsx test/creditCardInvoice.test.ts && tsx test/derivedFields.test.ts && tsx test/sync.test.ts && tsx test/goalLedger.test.ts && tsx test/goalLedgerEtapa7.test.ts && tsx test/investments.test.ts && tsx test/investmentRulesEtapa8.test.ts && tsx test/investmentTransactions.test.ts && tsx test/investmentAporte.test.ts && tsx test/goalPersistenceAndReset.test.ts && tsx test/investmentAporteFlow.test.ts && tsx test/investmentPosition.test.ts && tsx test/investmentLedgerIntegration.test.ts",
+    "test": "tsx test/creditCardInvoice.test.ts && tsx test/derivedFields.test.ts && tsx test/sync.test.ts && tsx test/goalLedger.test.ts && tsx test/goalLedgerEtapa7.test.ts && tsx test/investments.test.ts && tsx test/investmentRulesEtapa8.test.ts && tsx test/investmentTransactions.test.ts && tsx test/investmentAporte.test.ts && tsx test/goalPersistenceAndReset.test.ts && tsx test/investmentAporteFlow.test.ts && tsx test/investmentPosition.test.ts && tsx test/investmentLedgerIntegration.test.ts && tsx test/indexedDbMigration.test.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -17,6 +17,7 @@
     "@types/canvas-confetti": "^1.9.0",
     "@vitejs/plugin-react": "^6.1.1",
     "canvas-confetti": "^1.9.4",
+    "dexie": "^4.4.6",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^12.19.0",
@@ -33,6 +34,7 @@
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",

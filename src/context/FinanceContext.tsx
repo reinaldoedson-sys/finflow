@@ -39,6 +39,19 @@ import { getCurrentMonth, getPreviousMonth, getNextMonth } from '../utils/curren
 import { encryptData, decryptData } from '../utils/crypto';
 import { useAuth } from './AuthContext';
 import { db, handleFirestoreError, OperationType } from '../firebase';
+import {
+  isIndexedDBAvailable,
+  migrateFromLocalStorageIfAvailable,
+  loadAllFinancialEntities,
+  replaceCollection,
+  clearAllFinancialEntities,
+} from '../storage/indexedDB';
+import {
+  queryTransactionsPaged,
+  subscribeMonthTransactions,
+  getMonthDateRange,
+  type PaginatedTransactionsResult,
+} from '../services/firestoreTransactions';
 import { 
   collection, 
   doc, 
@@ -47,7 +60,12 @@ import {
   updateDoc, 
   onSnapshot, 
   writeBatch,
-  getDocs 
+  getDocs,
+  query,
+  where,
+  orderBy,
+  QueryDocumentSnapshot,
+  DocumentData
 } from 'firebase/firestore';
 import { generateId } from '../domain/id';
 import { toCents, fromCents, addMoney, subtractMoney } from '../domain/money';
@@ -158,6 +176,16 @@ interface FinanceContextType {
   updateTransaction: (id: string, tx: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   toggleTransactionStatus: (id: string) => Promise<void>;
+  loadHistoricalTransactions: (options?: {
+    pageSize?: number;
+    startDate?: string;
+    endDate?: string;
+    reset?: boolean;
+  }) => Promise<{ count: number; hasMore: boolean }>;
+  historicalPagination: {
+    hasMore: boolean;
+    isLoading: boolean;
+  };
 
   // Account Actions
   addAccount: (acc: Omit<Account, 'id' | 'currentBalance'>) => Promise<void>;
@@ -312,9 +340,43 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [isRefreshingQuotes, setIsRefreshingQuotes] = useState(false);
   const [lastQuotesUpdate, setLastQuotesUpdate] = useState<string | null>(null);
 
-  // Set initial flag after first boot
+  // Set initial flag after first boot and run IndexedDB migration/hydration
+  const isIndexedDBHydratedRef = React.useRef(false);
+
   useEffect(() => {
     localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
+
+    // Executa migração assíncrona segura do localStorage para o IndexedDB
+    const initIndexedDB = async () => {
+      try {
+        if (!isIndexedDBAvailable()) return;
+
+        // Migra dados caso seja a primeira execução com Dexie
+        await migrateFromLocalStorageIfAvailable();
+
+        // Se o usuário não estiver autenticado na nuvem, podemos carregar
+        // os dados do IndexedDB se existirem mais recentes
+        const stored = await loadAllFinancialEntities();
+        if (stored) {
+          // Atualiza o estado se houver dados persistidos no IndexedDB
+          if (stored.accounts.length > 0) setAccounts(stored.accounts);
+          if (stored.creditCards.length > 0) setCreditCards(stored.creditCards);
+          if (stored.budgets.length > 0) setBudgets(stored.budgets);
+          if (stored.goals.length > 0) setGoals(stored.goals);
+          if (stored.goalMovements.length > 0) setGoalMovements(stored.goalMovements);
+          if (stored.installmentPlans.length > 0) setInstallmentPlans(stored.installmentPlans);
+          if (stored.transactions.length > 0) setTransactions(stored.transactions);
+          if (stored.investments.length > 0) setInvestments(stored.investments);
+          if (stored.investmentTransactions.length > 0) setInvestmentTransactions(stored.investmentTransactions);
+        }
+      } catch (err) {
+        console.warn('[FinFlow IndexedDB] Erro não impeditivo ao inicializar IndexedDB:', err);
+      } finally {
+        isIndexedDBHydratedRef.current = true;
+      }
+    };
+
+    initIndexedDB();
   }, []);
 
   // Fila de operações pendentes e estado de sincronização
@@ -346,6 +408,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'budgets', JSON.stringify(budgets));
+    replaceCollection('budgets', budgets).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar budgets no IndexedDB:', err);
+    });
   }, [budgets]);
 
   useEffect(() => {
@@ -359,34 +424,58 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       };
     });
     localStorage.setItem(STORAGE_KEY_PREFIX + 'goals', JSON.stringify(sanitizedGoals));
+    replaceCollection('goals', sanitizedGoals).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar goals no IndexedDB:', err);
+    });
   }, [goals, goalMovements]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'goal_movements', JSON.stringify(goalMovements));
+    replaceCollection('goalMovements', goalMovements).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar goalMovements no IndexedDB:', err);
+    });
   }, [goalMovements]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'installment_plans', JSON.stringify(installmentPlans));
+    replaceCollection('installmentPlans', installmentPlans).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar installmentPlans no IndexedDB:', err);
+    });
   }, [installmentPlans]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify(transactions));
+    replaceCollection('transactions', transactions).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar transactions no IndexedDB:', err);
+    });
   }, [transactions]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'accounts', JSON.stringify(accounts));
+    replaceCollection('accounts', accounts).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar accounts no IndexedDB:', err);
+    });
   }, [accounts]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'credit_cards', JSON.stringify(creditCards));
+    replaceCollection('creditCards', creditCards).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar creditCards no IndexedDB:', err);
+    });
   }, [creditCards]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(investments));
+    replaceCollection('investments', investments).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar investments no IndexedDB:', err);
+    });
   }, [investments]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(investmentTransactions));
+    replaceCollection('investmentTransactions', investmentTransactions).catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao sincronizar investmentTransactions no IndexedDB:', err);
+    });
   }, [investmentTransactions]);
 
   // Auto-process pending sync queue when user logs in or auth resolves
@@ -504,21 +593,6 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
     );
 
-    // Listen to Transactions
-    const unsubTransactions = onSnapshot(
-      collection(db, 'users', uid, 'transactions'),
-      (snapshot) => {
-        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-        setTransactions(prev => {
-          const merged = mergeCloudWithPending(list, pendingQueueRef.current, 'transactions', prev);
-          return merged.sort((a, b) => b.date.localeCompare(a.date));
-        });
-      },
-      (error) => {
-        console.warn('[FinFlow Sync] Erro ao escutar transações no Firestore:', error);
-      }
-    );
-
     // Listen to Investments
     const unsubInvestments = onSnapshot(
       collection(db, 'users', uid, 'investments'),
@@ -554,11 +628,36 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       unsubGoals();
       unsubGoalMovements();
       unsubPlans();
-      unsubTransactions();
       unsubInvestments();
       unsubInvestmentTransactions();
     };
   }, [currentUser, isAuthReady]);
+
+  // Listener reativo otimizado para transações: escuta estritamente o mês selecionado
+  useEffect(() => {
+    if (!currentUser || !isAuthReady) return;
+    const uid = currentUser.uid;
+
+    const unsubTransactions = subscribeMonthTransactions(
+      uid,
+      selectedMonth,
+      (cloudMonthList) => {
+        setTransactions(prev => {
+          // Merge das transações do mês com a fila de operações pendentes
+          const mergedMonth = mergeCloudWithPending(cloudMonthList, pendingQueueRef.current, 'transactions', prev);
+
+          // Preserva transações de outros meses que foram carregadas sob demanda ou do IndexedDB
+          const otherMonths = prev.filter(t => !t.date.startsWith(selectedMonth));
+          const combined = [...mergedMonth, ...otherMonths];
+          return combined.sort((a, b) => b.date.localeCompare(a.date));
+        });
+      }
+    );
+
+    return () => {
+      unsubTransactions();
+    };
+  }, [currentUser, isAuthReady, selectedMonth]);
 
   // Check if demo data is currently loaded and visible
   const isDemoActive = useMemo(() => {
@@ -1084,6 +1183,68 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (!target) return;
     const newStatus = target.status === 'completed' ? 'pending' : 'completed';
     await updateTransaction(id, { status: newStatus });
+  };
+
+  // Estado e cursor para paginação de histórico de transações sob demanda (startAfter)
+  const [historicalPagination, setHistoricalPagination] = useState<{
+    hasMore: boolean;
+    isLoading: boolean;
+  }>({
+    hasMore: true,
+    isLoading: false,
+  });
+  const lastVisibleTxDocRef = React.useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+
+  const loadHistoricalTransactions = async (options?: {
+    pageSize?: number;
+    startDate?: string;
+    endDate?: string;
+    reset?: boolean;
+  }): Promise<{ count: number; hasMore: boolean }> => {
+    if (!currentUser) {
+      return { count: 0, hasMore: false };
+    }
+
+    if (options?.reset) {
+      lastVisibleTxDocRef.current = null;
+    }
+
+    setHistoricalPagination(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      const result = await queryTransactionsPaged(currentUser.uid, {
+        pageSize: options?.pageSize || 30,
+        startAfterDoc: lastVisibleTxDocRef.current,
+        startDate: options?.startDate,
+        endDate: options?.endDate,
+      });
+
+      lastVisibleTxDocRef.current = result.lastVisible;
+
+      if (result.items.length > 0) {
+        setTransactions(prev => {
+          // Merge sem duplicar transações já existentes
+          const existingIds = new Set(prev.map(t => t.id));
+          const newUnique = result.items.filter(item => !existingIds.has(item.id));
+          const combined = [...prev, ...newUnique];
+          return combined.sort((a, b) => b.date.localeCompare(a.date));
+        });
+      }
+
+      setHistoricalPagination({
+        hasMore: result.hasMore,
+        isLoading: false,
+      });
+
+      return {
+        count: result.items.length,
+        hasMore: result.hasMore,
+      };
+    } catch (err) {
+      console.warn('[FinFlow Firestore] Falha ao paginar histórico de transações:', err);
+      setHistoricalPagination(prev => ({ ...prev, isLoading: false }));
+      return { count: 0, hasMore: false };
+    }
   };
 
   // Account CRUD
@@ -2445,6 +2606,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify([]));
 
+    clearAllFinancialEntities().catch(err => {
+      console.warn('[FinFlow IndexedDB] Erro ao limpar entidades no IndexedDB:', err);
+    });
+
     setCategories(DEFAULT_CATEGORIES);
     setAccounts([]);
     setCreditCards([]);
@@ -2505,6 +2670,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         updateTransaction,
         deleteTransaction,
         toggleTransactionStatus,
+        loadHistoricalTransactions,
+        historicalPagination,
         addAccount,
         updateAccount,
         deleteAccount,

@@ -41,7 +41,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     deleteTransaction, 
     toggleTransactionStatus,
     addTransaction,
-    selectedMonth
+    selectedMonth,
+    loadHistoricalTransactions,
+    historicalPagination,
+    isCloudSynced
   } = useFinance();
   const { hideValues } = useSecurity();
 
@@ -610,6 +613,30 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Carregamento sob demanda do histórico do Firestore */}
+      {historicalPagination.hasMore && (
+        <div className="flex justify-center pt-2">
+          <button
+            type="button"
+            onClick={() => loadHistoricalTransactions({ pageSize: 30 })}
+            disabled={historicalPagination.isLoading}
+            className="px-4 py-2 text-xs font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-xl transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
+          >
+            {historicalPagination.isLoading ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                <span>Carregando histórico antigo...</span>
+              </>
+            ) : (
+              <>
+                <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Carregar mais histórico anterior</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
