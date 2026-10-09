@@ -48,6 +48,18 @@ export class ConflictResolver {
       };
     }
 
+    if (localItem?.deleted) {
+      const localRev = (localItem as any).tombstoneRevision || localItem.revision || 1;
+      const remoteRev = remoteItem?.revision ?? 0;
+      if (localRev >= remoteRev) {
+        return {
+          action: 'mark_deleted',
+          divergenceDetected: false,
+          reason: 'Entidade possui tombstone local com revisão igual ou superior à nuvem. Não ressuscitar.',
+        };
+      }
+    }
+
     if (remoteItem?.deleted) {
       const localRev = localItem?.revision ?? 0;
       const remoteRev = remoteItem?.revision ?? 0;

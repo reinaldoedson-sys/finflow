@@ -5,13 +5,17 @@ import type { CreditCardRepository } from '../interfaces/CreditCardRepository';
 export class IndexedDBCreditCardRepository implements CreditCardRepository {
   constructor(private database: FinFlowDatabase = db) {}
 
-  async getAll(): Promise<CreditCard[]> {
-    return this.database.creditCards.toArray();
+  async getAll(includeDeleted = false): Promise<CreditCard[]> {
+    const items = await this.database.creditCards.toArray();
+    if (includeDeleted) return items;
+    return items.filter(c => !(c as any).deleted);
   }
 
-  async getById(id: string): Promise<CreditCard | null> {
+  async getById(id: string, includeDeleted = false): Promise<CreditCard | null> {
     const item = await this.database.creditCards.get(id);
-    return item ?? null;
+    if (!item) return null;
+    if (!includeDeleted && (item as any).deleted) return null;
+    return item;
   }
 
   async save(item: CreditCard): Promise<void> {
@@ -24,7 +28,17 @@ export class IndexedDBCreditCardRepository implements CreditCardRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.database.creditCards.delete(id);
+    // Soft delete por padrão para preservar integridade referencial
+    const existing = await this.database.creditCards.get(id);
+    if (existing) {
+      await this.database.creditCards.put({
+        ...existing,
+        deleted: true,
+        deletedAt: new Date().toISOString(),
+      } as any);
+    } else {
+      await this.database.creditCards.delete(id);
+    }
   }
 
   async replaceAll(items: CreditCard[]): Promise<void> {
@@ -40,8 +54,10 @@ export class IndexedDBCreditCardRepository implements CreditCardRepository {
     await this.database.creditCards.clear();
   }
 
-  async count(): Promise<number> {
-    return this.database.creditCards.count();
+  async count(includeDeleted = false): Promise<number> {
+    const items = await this.database.creditCards.toArray();
+    if (includeDeleted) return items.length;
+    return items.filter(c => !(c as any).deleted).length;
   }
 
   async saveInvoiceSnapshot(id: string, invoiceSnapshot: number): Promise<void> {

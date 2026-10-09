@@ -7,16 +7,17 @@ import type { InvestmentAsset, InvestmentTransaction } from '../../types/finance
  */
 export interface InvestmentRepository {
   // --- Ativos (Investment Assets) ---
-  getAllAssets(): Promise<InvestmentAsset[]>;
-  getAssetById(id: string): Promise<InvestmentAsset | null>;
+  getAllAssets(includeDeleted?: boolean): Promise<InvestmentAsset[]>;
+  getAssetById(id: string, includeDeleted?: boolean): Promise<InvestmentAsset | null>;
   saveAsset(asset: InvestmentAsset): Promise<void>;
   saveAssetsBatch(assets: InvestmentAsset[]): Promise<void>;
   deleteAsset(id: string): Promise<void>;
   replaceAssets(assets: InvestmentAsset[]): Promise<void>;
 
   // --- Ledger de Transações de Investimento (Buy / Sell / Dividend) ---
-  getAllTransactions(): Promise<InvestmentTransaction[]>;
-  getTransactionsByAssetId(assetId: string): Promise<InvestmentTransaction[]>;
+  getAllTransactions(includeDeleted?: boolean): Promise<InvestmentTransaction[]>;
+  getTransactionById(id: string, includeDeleted?: boolean): Promise<InvestmentTransaction | null>;
+  getTransactionsByAssetId(assetId: string, includeDeleted?: boolean): Promise<InvestmentTransaction[]>;
   saveTransaction(tx: InvestmentTransaction): Promise<void>;
   saveTransactionsBatch(txs: InvestmentTransaction[]): Promise<void>;
   deleteTransaction(id: string): Promise<void>;

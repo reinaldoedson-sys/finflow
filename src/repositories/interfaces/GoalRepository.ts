@@ -16,6 +16,7 @@ export interface GoalRepository {
 
   // --- Movimentações de Metas (Goal Movements Ledger) ---
   getAllMovements(): Promise<GoalMovement[]>;
+  getMovementById(id: string): Promise<GoalMovement | null>;
   getMovementsByGoalId(goalId: string): Promise<GoalMovement[]>;
   saveMovement(movement: GoalMovement): Promise<void>;
   saveMovementsBatch(movements: GoalMovement[]): Promise<void>;

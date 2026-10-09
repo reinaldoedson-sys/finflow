@@ -307,7 +307,21 @@ async function runTests() {
 
   await cardRepo.delete('card_2');
   assert((await cardRepo.getById('card_2')) === null, 'card_2 deve ter sido deletado');
-  assert((await cardRepo.count()) === 1, 'Deveria restar 1 cartão');
+  assert((await cardRepo.count()) === 1, 'Deveria restar 1 cartão ativo');
+
+  // Testes de exclusão lógica (tombstone) e includeDeleted (Etapa 2.6)
+  const tombstonedCard2 = await cardRepo.getById('card_2', true);
+  assert(tombstonedCard2 !== null, 'card_2 tombstoned deve permanecer acessível internamente com includeDeleted=true');
+  assert((tombstonedCard2 as any).deleted === true, 'Flag deleted do cartão deve ser true');
+
+  const allActiveCards = await cardRepo.getAll();
+  assert(allActiveCards.length === 1, 'getAll() ativo deve retornar apenas 1 cartão');
+
+  const allCardsWithDeleted = await cardRepo.getAll(true);
+  assert(allCardsWithDeleted.length === 2, 'getAll(true) deve retornar cartões ativos e tombstoned');
+
+  const totalCardRawCount = await cardRepo.count(true);
+  assert(totalCardRawCount === 2, 'count(true) deve incluir tombstoned');
 
   // =========================================================================
   // 4. Testes de IndexedDBInvestmentRepository

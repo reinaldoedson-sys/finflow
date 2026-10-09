@@ -330,8 +330,60 @@ async function runTests() {
   await syncService.processQueue();
   assert((await queue.count()) === 0, 'Fila deve zerar após sincronizar exclusão');
 
+  // Testes de Cartões de Crédito Local-First (Etapa 2.6)
+  console.log('  -> Testando saveCreditCard no FinancialSyncService (Etapa 2.6)...');
+  await syncService.saveCreditCard({
+    id: 'card_local_1',
+    name: 'Cartão C6 Carbon',
+    bankName: 'C6 Bank',
+    color: '#000000',
+    limit: 1000000,
+    closingDay: 15,
+    dueDay: 22,
+    currentInvoice: 45000, // derivado, não deve ir para a fila de sincronização
+  });
+
+  const localSavedCard = await cardRepo.getById('card_local_1');
+  assert(localSavedCard !== null, 'Cartão deve ter sido salvo no IndexedDB');
+  assert(localSavedCard!.name === 'Cartão C6 Carbon', 'Nome do cartão deve bater');
+
+  // Verifica que currentInvoice não entrou no payload da SyncQueue
+  const allQueued = await queue.getAll();
+  const queuedCardItem = allQueued.find(i => i.entityName === 'creditCards' && i.entityId === 'card_local_1');
+  assert(queuedCardItem !== undefined, 'Item do cartão deve estar na SyncQueue');
+  assert(queuedCardItem!.entityName === 'creditCards', 'Entidade na fila deve ser creditCards');
+  assert((queuedCardItem!.payload as any)?.currentInvoice === undefined, 'currentInvoice NÃO deve estar no payload de sincronização');
+  assert((queuedCardItem!.payload as any)?.limit === 1000000, 'Limite sincronizado deve estar presente');
+
+  // Snapshot de fatura local (cache local sem sujar a fila)
+  console.log('  -> Testando saveCreditCardInvoiceSnapshot (cache local sem sujar fila)...');
+  await syncService.saveCreditCardInvoiceSnapshot('card_local_1', 89000);
+  const snapCard = await cardRepo.getById('card_local_1');
+  assert(snapCard!.currentInvoice === 89000, 'Snapshot de fatura deve ser atualizado no IndexedDB');
+  assert((await queue.count()) === 1, 'Fila deve conter apenas a criação do cartão, snapshot não deve enfileirar');
+
+  // Sincroniza criação do cartão
+  await syncService.processQueue();
+  assert((await queue.count()) === 0, 'Fila deve zerar após sincronizar cartão');
+
+  // Soft-delete / tombstone de cartão
+  console.log('  -> Testando deleteCreditCard (tombstone e preservação referencial)...');
+  await syncService.deleteCreditCard('card_local_1');
+  const activeCardAfterDelete = await cardRepo.getById('card_local_1');
+  assert(activeCardAfterDelete === null, 'Cartão deletado não deve aparecer em consultas ativas');
+
+  const tombstoneCard = await cardRepo.getById('card_local_1', true);
+  assert(tombstoneCard !== null, 'Registro tombstone do cartão deve existir no IndexedDB');
+  assert((tombstoneCard as any).deleted === true, 'Flag deleted do cartão deve ser true');
+  assert((tombstoneCard as any).deletedAt !== undefined, 'deletedAt do cartão deve estar preenchido');
+  assert((tombstoneCard as any).tombstoneRevision >= 2, 'tombstoneRevision do cartão deve ter sido incrementado');
+
+  assert((await queue.count()) === 1, 'Fila deve ter 1 operação de exclusão do cartão');
+  await syncService.processQueue();
+  assert((await queue.count()) === 0, 'Fila deve zerar após sincronizar exclusão do cartão');
+
   console.log('\n======================================================');
-  console.log('✅ TODOS OS TESTES DA ETAPA 2.3 FORAM APROVADOS COM SUCESSO!');
+  console.log('✅ TODOS OS TESTES DAS ETAPAS 2.3 A 2.6 FORAM APROVADOS COM SUCESSO!');
   console.log('======================================================');
 }
 

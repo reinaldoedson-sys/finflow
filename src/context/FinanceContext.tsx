@@ -498,23 +498,14 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'credit_cards', JSON.stringify(creditCards));
-    replaceCollection('creditCards', creditCards).catch(err => {
-      console.warn('[FinFlow IndexedDB] Erro ao sincronizar creditCards no IndexedDB:', err);
-    });
   }, [creditCards]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(investments));
-    replaceCollection('investments', investments).catch(err => {
-      console.warn('[FinFlow IndexedDB] Erro ao sincronizar investments no IndexedDB:', err);
-    });
   }, [investments]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(investmentTransactions));
-    replaceCollection('investmentTransactions', investmentTransactions).catch(err => {
-      console.warn('[FinFlow IndexedDB] Erro ao sincronizar investmentTransactions no IndexedDB:', err);
-    });
   }, [investmentTransactions]);
 
   // Auto-process pending sync queue when user logs in or auth resolves
@@ -546,6 +537,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Account));
         setAccounts(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'accounts', prev));
+        financialSyncService.hydrateFromCloud('accounts', list).catch(err => {
+          console.warn('[FinFlow Sync] Erro ao hidratar contas no IndexedDB:', err);
+        });
       },
       (error) => {
         console.warn('[FinFlow Sync] Erro ao escutar contas no Firestore:', error);
@@ -558,6 +552,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CreditCard));
         setCreditCards(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'creditCards', prev));
+        financialSyncService.hydrateFromCloud('creditCards', list).catch(err => {
+          console.warn('[FinFlow Sync] Erro ao hidratar cartões no IndexedDB:', err);
+        });
       },
       (error) => {
         console.warn('[FinFlow Sync] Erro ao escutar cartões no Firestore:', error);
@@ -638,6 +635,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       (snapshot) => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InvestmentAsset));
         setInvestments(prev => mergeCloudWithPending(list, pendingQueueRef.current, 'investments', prev));
+        financialSyncService.hydrateFromCloud('investments', list).catch(err => {
+          console.warn('[FinFlow Sync] Erro ao hidratar investimentos no IndexedDB:', err);
+        });
       },
       (error) => {
         console.warn('[FinFlow Sync] Erro ao escutar investimentos no Firestore:', error);
@@ -652,6 +652,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         setInvestmentTransactions(prev => {
           const merged = mergeCloudWithPending(list, pendingQueueRef.current, 'investmentTransactions', prev);
           return merged.sort((a, b) => b.date.localeCompare(a.date));
+        });
+        financialSyncService.hydrateFromCloud('investmentTransactions', list).catch(err => {
+          console.warn('[FinFlow Sync] Erro ao hidratar ledger de investimentos no IndexedDB:', err);
         });
       },
       (error) => {
@@ -689,6 +692,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
           const otherMonths = prev.filter(t => !t.date.startsWith(selectedMonth));
           const combined = [...mergedMonth, ...otherMonths];
           return combined.sort((a, b) => b.date.localeCompare(a.date));
+        });
+
+        financialSyncService.hydrateFromCloud('transactions', cloudMonthList).catch(err => {
+          console.warn('[FinFlow Sync] Erro ao hidratar transações no IndexedDB:', err);
         });
       }
     );
@@ -1313,7 +1320,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setAccounts(prev => prev.filter(acc => acc.id !== id));
   };
 
-  // Credit Card CRUD
+  // Credit Card CRUD (Etapa 2.6 - CREDIT CARDS Local-First)
   const addCreditCard = async (card: Omit<CreditCard, 'id' | 'currentInvoice'>) => {
     const newId = generateId('card');
     const newCard: CreditCard = {
@@ -1322,40 +1329,55 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       currentInvoice: 0
     };
 
-    setCreditCards(prev => [...prev, newCard]);
+    // 1. Primeiro: persistência Local-First via FinancialSyncService (IndexedDB + SyncQueue)
+    // Sincroniza metadados do cartão; snapshot de fatura não polui a fila de sincronização
+    await financialSyncService.saveCreditCard(newCard);
+    await financialSyncService.saveCreditCardInvoiceSnapshot(newId, 0).catch(err => {
+      console.warn('[FinFlow Local-First] Erro ao salvar invoice snapshot inicial:', err);
+    });
 
-    if (currentUser) {
-      await executeSync('creditCards', newId, 'set', {
-        name: card.name,
-        bankName: card.bankName,
-        color: card.color,
-        limit: card.limit,
-        closingDay: card.closingDay,
-        dueDay: card.dueDay,
-        currentInvoice: 0,
-        userId: currentUser.uid
-      });
-    }
+    // 2. Depois: atualiza estado da UI apenas após persistência local garantida
+    setCreditCards(prev => [...prev, newCard]);
   };
 
   const updateCreditCard = async (id: string, updatedFields: Partial<CreditCard>) => {
-    setCreditCards(prev => prev.map(c => c.id === id ? { ...c, ...updatedFields } : c));
+    const existing = creditCards.find(c => c.id === id);
+    if (!existing) return;
 
-    if (currentUser) {
-      await executeSync('creditCards', id, 'update', {
-        ...updatedFields,
-        userId: currentUser.uid
-      });
-    }
+    const mergedCard: CreditCard = {
+      ...existing,
+      ...updatedFields,
+      id,
+    };
+
+    // 1. Primeiro: persistência Local-First via FinancialSyncService
+    await financialSyncService.saveCreditCard(mergedCard);
+
+    // 2. Depois: atualiza estado da UI
+    setCreditCards(prev => prev.map(c => c.id === id ? mergedCard : c));
   };
 
   const deleteCreditCard = async (id: string) => {
     localStorage.setItem(DEMO_CLEARED_KEY, 'true');
-    setCreditCards(prev => prev.filter(c => c.id !== id));
 
-    if (currentUser) {
-      await executeSync('creditCards', id, 'delete');
+    // 1. Preservação de integridade referencial:
+    // Verifica existência de transações ou parcelamentos vinculados antes da exclusão
+    const linkedTransactions = transactions.filter(t => t.creditCardId === id && !(t as any).deleted);
+    const linkedPlans = installmentPlans.filter(p => p.creditCardId === id);
+
+    if (linkedTransactions.length > 0 || linkedPlans.length > 0) {
+      console.info(
+        `[FinFlow CreditCard] Cartão ${id} possui histórico financeiro vinculado ` +
+        `(${linkedTransactions.length} transações, ${linkedPlans.length} parcelamentos). ` +
+        `Preservando registros históricos com exclusão lógica via tombstone.`
+      );
     }
+
+    // 2. Primeiro: persistência no IndexedDB com tombstone e enfileiramento na SyncQueue
+    await financialSyncService.deleteCreditCard(id);
+
+    // 3. Depois: remove da visão ativa da UI
+    setCreditCards(prev => prev.filter(c => c.id !== id));
   };
 
   // Category CRUD
@@ -1805,6 +1827,19 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
           return inv;
         }));
         setLastQuotesUpdate(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+
+        // Atualiza cache local no IndexedDB sem poluir a SyncQueue
+        for (const inv of investments) {
+          const upper = (inv.ticker || '').toUpperCase();
+          const q = quotes[upper] || quotes[`${upper}.SA`];
+          if (q && typeof q.price === 'number') {
+            financialSyncService.updateInvestmentMarketQuote(inv.id, q.price, {
+              previousClose: q.previousClose,
+              changePercent: q.changePercent,
+              lastPriceUpdate: q.updatedAt || new Date().toISOString(),
+            }).catch(console.warn);
+          }
+        }
       }
     } catch (err) {
       console.warn('Erro ao atualizar cotações de investimentos:', err);
@@ -1827,28 +1862,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       createdAt
     };
 
+    // 1. Persistência Local-First no IndexedDB e SyncQueue
+    await financialSyncService.saveInvestmentAsset(newAsset);
+
+    // 2. Atualiza estado da UI
     setInvestments(prev => [...prev, newAsset]);
-
-    const syncPayload = {
-      id: newId,
-      ticker: newAsset.ticker,
-      name: newAsset.name,
-      type: newAsset.type,
-      quantity: newAsset.quantity,
-      averagePrice: newAsset.averagePrice,
-      currentPrice: newAsset.currentPrice,
-      currency: newAsset.currency,
-      autoUpdate: !!newAsset.autoUpdate,
-      ...(newAsset.previousClose !== undefined ? { previousClose: newAsset.previousClose } : {}),
-      ...(newAsset.changePercent !== undefined ? { changePercent: newAsset.changePercent } : {}),
-      ...(newAsset.institution ? { institution: newAsset.institution } : {}),
-      ...(newAsset.lastPriceUpdate ? { lastPriceUpdate: newAsset.lastPriceUpdate } : {}),
-      ...(newAsset.notes ? { notes: newAsset.notes } : {}),
-      userId: currentUser?.uid || '',
-      createdAt
-    };
-
-    await executeSync('investments', newId, 'set', syncPayload);
 
     if (newAsset.autoUpdate && newAsset.ticker) {
       setTimeout(() => {
@@ -1860,28 +1878,44 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const updateInvestment = async (id: string, updates: Partial<InvestmentAsset>) => {
-    setInvestments(prev => prev.map(inv => inv.id === id ? { ...inv, ...updates } : inv));
+    const existing = investments.find(inv => inv.id === id);
+    const merged = existing ? { ...existing, ...updates } : ({ id, ...updates } as InvestmentAsset);
 
-    await executeSync('investments', id, 'update', {
-      ...updates,
-      userId: currentUser?.uid || ''
-    });
+    // 1. Persistência Local-First no IndexedDB e SyncQueue
+    await financialSyncService.saveInvestmentAsset(merged);
+
+    // 2. Atualiza estado da UI
+    setInvestments(prev => prev.map(inv => inv.id === id ? { ...inv, ...updates } : inv));
   };
 
   const deleteInvestment = async (id: string) => {
+    // 1. Integridade referencial: verifica se há transações ativas vinculadas no ledger
+    const linkedTxs = investmentTransactions.filter(t => t.assetId === id && !(t as any).deleted);
+    if (linkedTxs.length > 0) {
+      console.info(
+        `[FinFlow Investment] Ativo ${id} possui ${linkedTxs.length} transações no ledger vinculadas. ` +
+        `Preservando histórico e aplicando soft delete / tombstone.`
+      );
+    }
+
+    // 2. Persistência Local-First com soft-delete/tombstone
+    await financialSyncService.deleteInvestmentAsset(id);
+
+    // 3. Remove da visão ativa da UI
     setInvestments(prev => prev.filter(inv => inv.id !== id));
-    await executeSync('investments', id, 'delete');
   };
 
   const loadSampleInvestments = async () => {
     setInvestments(INITIAL_INVESTMENTS);
     setInvestmentTransactions(INITIAL_INVESTMENT_TRANSACTIONS);
+    await investmentRepo.saveAssetsBatch(INITIAL_INVESTMENTS).catch(console.warn);
+    await investmentRepo.saveTransactionsBatch(INITIAL_INVESTMENT_TRANSACTIONS).catch(console.warn);
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(INITIAL_INVESTMENTS));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(INITIAL_INVESTMENT_TRANSACTIONS));
     await refreshInvestmentQuotes();
   };
 
-  // Investment Transactions Actions (Ledger de investimentos - Etapa 9)
+  // Investment Transactions Actions (Ledger de investimentos - Etapa 2.8 Local-First)
   const addInvestmentTransaction = async (tx: Omit<InvestmentTransaction, 'id' | 'createdAt'>): Promise<string> => {
     // Integridade referencial: o ativo deve existir na carteira
     const assetExists = investments.some(a => a.id === tx.assetId);
@@ -1891,22 +1925,13 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     const validatedTx = createInvestmentTransaction(tx, investments);
 
+    // 1. Persistência Local-First no IndexedDB e SyncQueue com dependência causal
+    await financialSyncService.saveInvestmentTransaction(validatedTx, {
+      dependsOn: [{ entityName: 'investments', entityId: validatedTx.assetId }]
+    });
+
+    // 2. Atualiza estado da UI
     setInvestmentTransactions(prev => [validatedTx, ...prev]);
-
-    const syncTxPayload = {
-      id: validatedTx.id,
-      assetId: validatedTx.assetId,
-      type: validatedTx.type,
-      date: validatedTx.date,
-      quantity: validatedTx.quantity,
-      price: validatedTx.price,
-      totalAmount: validatedTx.totalAmount,
-      ...(validatedTx.notes ? { notes: validatedTx.notes } : {}),
-      userId: currentUser?.uid || '',
-      createdAt: validatedTx.createdAt
-    };
-
-    await executeSync('investmentTransactions', validatedTx.id, 'set', syncTxPayload);
 
     return validatedTx.id;
   };
@@ -1938,29 +1963,30 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       throw new Error(validation.error || 'Dados da operação inválidos.');
     }
 
-    setInvestmentTransactions(prev => prev.map(t => t.id === id ? merged : t));
+    // 1. Ledger imutável: registra ajuste contábil Local-First
+    await financialSyncService.recordInvestmentAdjustment(id, merged);
 
-    await executeSync('investmentTransactions', id, 'update', {
-      ...updates,
-      ...(updates.totalAmount === undefined && (merged.type === 'buy' || merged.type === 'sell')
-        ? { totalAmount: merged.totalAmount }
-        : {}),
-      userId: currentUser?.uid || ''
-    });
+    // 2. Atualiza estado da UI
+    setInvestmentTransactions(prev => prev.map(t => t.id === id ? merged : t));
   };
 
   const deleteInvestmentTransaction = async (id: string) => {
+    // 1. Ledger imutável: anulação/reversal com tombstone Local-First
+    await financialSyncService.deleteInvestmentTransaction(id, undefined, 'user_reversal');
+
+    // 2. Remove da visão ativa da UI
     setInvestmentTransactions(prev => prev.filter(t => t.id !== id));
-    await executeSync('investmentTransactions', id, 'delete');
   };
 
   /**
-   * Executa um aporte financeiro em um ativo de investimento (Etapa 9.6B):
-   * 1. Pré-validação estrita antes de tocar no estado local ou na nuvem
+   * Executa um aporte financeiro em um ativo de investimento (Etapa 2.8 - Operação Atômica Local-First):
+   * 1. Pré-validação estrita antes de tocar no estado local ou na fila
    * 2. Preparação determinística e verificação de idempotência (previne duplicação em retry)
-   * 3. Atualização local coordenada com rollback de segurança
-   * 4. Persistência atômica via writeBatch no Firestore
-   * 5. Sincronização resiliente: em caso de falha de rede/nuvem, enfileira no Sync Engine
+   * 3. Execução atômica local via transação Dexie e batch de SyncQueue
+   * 4. correlationId obrigatório e dependências causais estritas:
+   *    - InvestmentTransaction: dependsOn InvestmentAsset
+   *    - Transaction bancária: dependsOn Account
+   * 5. Atualização de estado da UI apenas após confirmação do sucesso local
    */
   const executeInvestmentAporte = async (params: {
     assetId: string;
@@ -2003,139 +2029,83 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       return { transactionId: plan.itxId, debitTransactionId: plan.debitTxId };
     }
 
-    // 4. Snapshots locais para permitir rollback se houver falha local
-    const prevInvestments = investments;
-    const prevInvestmentTxs = investmentTransactions;
-    const prevTransactions = transactions;
+    // 4. correlationId obrigatório (Etapa 2.8 - Ajuste 4)
+    const correlationId = params.idempotencyKey || `aporte_${plan.itxId}`;
 
-    try {
-      // Atualiza o estado local de forma coordenada
-      const nextInvestmentTxs = !idempotency.itxExists
-        ? [plan.newInvestmentTransaction, ...prevInvestmentTxs.filter(t => t.id !== plan.itxId)]
-        : prevInvestmentTxs;
+    // Monta as operações atômicas da transação com dependências causais
+    const operations: any[] = [];
 
-      const nextInvestments = !idempotency.assetAlreadyUpdated
-        ? prevInvestments.map(inv => inv.id === targetAsset.id ? plan.updatedAsset : inv)
-        : prevInvestments;
-
-      const nextTransactions = (plan.newDebitTransaction && !idempotency.debitExists)
-        ? [plan.newDebitTransaction, ...prevTransactions.filter(t => t.id !== plan.debitTxId)]
-        : prevTransactions;
-
-      setInvestmentTransactions(nextInvestmentTxs);
-      setInvestments(nextInvestments);
-      if (plan.newDebitTransaction && !idempotency.debitExists) {
-        await transactionRepo.save(plan.newDebitTransaction).catch(console.warn);
-        setTransactions(nextTransactions);
-      }
-
-      // Persistência coordenada no localStorage
-      localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(nextInvestmentTxs));
-      localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(nextInvestments));
-      if (plan.newDebitTransaction) {
-        localStorage.setItem(STORAGE_KEY_PREFIX + 'transactions', JSON.stringify(nextTransactions));
-      }
-    } catch (localErr) {
-      // Rollback local em caso de erro inesperado
-      setInvestments(prevInvestments);
-      setInvestmentTransactions(prevInvestmentTxs);
-      setTransactions(prevTransactions);
-      throw new Error(`Falha ao registrar aporte localmente: ${localErr instanceof Error ? localErr.message : String(localErr)}`);
+    // Operação do Ativo (InvestmentAsset)
+    if (!idempotency.assetAlreadyUpdated) {
+      operations.push({
+        entityName: 'investments' as const,
+        entityId: targetAsset.id,
+        action: 'update' as const,
+        payload: plan.updatedAsset,
+      });
     }
 
-    // 5. Persistência atômica no Firestore / Sincronização Cloud
-    if (currentUser) {
-      const uid = currentUser.uid;
-      const itxPayload = sanitizePayload({
-        ...plan.newInvestmentTransaction,
-        userId: uid
+    // Operação do Ledger (InvestmentTransaction) com causalidade: dependsOn InvestmentAsset
+    if (!idempotency.itxExists) {
+      operations.push({
+        entityName: 'investmentTransactions' as const,
+        entityId: plan.itxId,
+        action: 'create' as const,
+        payload: plan.newInvestmentTransaction,
+        dependsOn: [
+          { entityName: 'investments' as const, entityId: targetAsset.id },
+        ],
       });
-      const assetPayload = sanitizePayload({
-        quantity: plan.newQuantity,
-        averagePrice: plan.newAveragePrice,
-        lastPriceUpdate: plan.updatedAsset.lastPriceUpdate,
-        userId: uid
-      });
-      const debitPayload = plan.newDebitTransaction
-        ? sanitizePayload({
-            description: plan.newDebitTransaction.description,
-            amount: plan.newDebitTransaction.amount,
-            type: plan.newDebitTransaction.type,
-            categoryId: plan.newDebitTransaction.categoryId,
-            accountId: plan.newDebitTransaction.accountId,
-            paymentMethod: plan.newDebitTransaction.paymentMethod,
-            date: plan.newDebitTransaction.date,
-            status: plan.newDebitTransaction.status,
-            notes: plan.newDebitTransaction.notes || '',
-            createdAt: plan.newDebitTransaction.createdAt,
-            userId: uid
-          })
-        : undefined;
+    }
 
-      try {
-        const batch = writeBatch(db);
-        if (!idempotency.itxExists) {
-          batch.set(doc(db, 'users', uid, 'investmentTransactions', plan.itxId), itxPayload);
-        }
+    // Operação bancária de débito com causalidade: dependsOn Account
+    if (plan.newDebitTransaction && !idempotency.debitExists && params.sourceAccountId) {
+      operations.push({
+        entityName: 'transactions' as const,
+        entityId: plan.debitTxId!,
+        action: 'create' as const,
+        payload: plan.newDebitTransaction,
+        dependsOn: [
+          { entityName: 'accounts' as const, entityId: params.sourceAccountId },
+        ],
+      });
+    }
+
+    // 5. Execução atômica local via FinancialSyncService (Etapa 2.8 - Ajuste 3 & 4)
+    // Garante consistência local via transação Dexie e enfileiramento na SyncQueue
+    await financialSyncService.executeAtomicOperation({
+      correlationId,
+      operations,
+      applyLocalPersist: async () => {
         if (!idempotency.assetAlreadyUpdated) {
-          batch.set(doc(db, 'users', uid, 'investments', targetAsset.id), assetPayload, { merge: true });
+          await investmentRepo.saveAsset(plan.updatedAsset);
         }
-        if (debitPayload && !idempotency.debitExists) {
-          batch.set(doc(db, 'users', uid, 'transactions', plan.debitTxId!), debitPayload);
+        if (!idempotency.itxExists) {
+          await investmentRepo.saveTransaction(plan.newInvestmentTransaction);
         }
-        await batch.commit();
+        if (plan.newDebitTransaction && !idempotency.debitExists) {
+          await transactionRepo.save(plan.newDebitTransaction);
+        }
+      },
+    });
 
-        setPendingQueue(prev => {
-          let next = dequeueOperation(prev, 'investmentTransactions', plan.itxId);
-          next = dequeueOperation(next, 'investments', targetAsset.id);
-          if (plan.debitTxId) {
-            next = dequeueOperation(next, 'transactions', plan.debitTxId);
-          }
-          if (next.length === 0) {
-            setSyncStatus('synced');
-            setSyncError(null);
-          }
-          return next;
-        });
-      } catch (cloudErr) {
-        const errMsg = cloudErr instanceof Error ? cloudErr.message : String(cloudErr);
-        console.warn('[FinFlow Sync] Falha ao sincronizar lote de aporte no Firestore:', errMsg);
+    // 6. Atualização coordenada do estado da UI após confirmação do sucesso local
+    const nextInvestmentTxs = !idempotency.itxExists
+      ? [plan.newInvestmentTransaction, ...investmentTransactions.filter(t => t.id !== plan.itxId)]
+      : investmentTransactions;
 
-        setPendingQueue(prev => {
-          let next = prev;
-          if (!idempotency.itxExists) {
-            next = enqueueOperation(next, {
-              collection: 'investmentTransactions',
-              docId: plan.itxId,
-              type: 'set',
-              payload: itxPayload,
-              lastError: errMsg
-            });
-          }
-          if (!idempotency.assetAlreadyUpdated) {
-            next = enqueueOperation(next, {
-              collection: 'investments',
-              docId: targetAsset.id,
-              type: 'update',
-              payload: assetPayload,
-              lastError: errMsg
-            });
-          }
-          if (debitPayload && !idempotency.debitExists) {
-            next = enqueueOperation(next, {
-              collection: 'transactions',
-              docId: plan.debitTxId!,
-              type: 'set',
-              payload: debitPayload,
-              lastError: errMsg
-            });
-          }
-          return next;
-        });
+    const nextInvestments = !idempotency.assetAlreadyUpdated
+      ? investments.map(inv => inv.id === targetAsset.id ? plan.updatedAsset : inv)
+      : investments;
 
-        setSyncStatus('error');
-        setSyncError('Aporte salvo localmente. Aguardando conexão para sincronizar com a nuvem.');
-      }
+    const nextTransactions = (plan.newDebitTransaction && !idempotency.debitExists)
+      ? [plan.newDebitTransaction, ...transactions.filter(t => t.id !== plan.debitTxId)]
+      : transactions;
+
+    setInvestmentTransactions(nextInvestmentTxs);
+    setInvestments(nextInvestments);
+    if (plan.newDebitTransaction && !idempotency.debitExists) {
+      setTransactions(nextTransactions);
     }
 
     return { transactionId: plan.itxId, debitTransactionId: plan.debitTxId };

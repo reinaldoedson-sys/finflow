@@ -57,6 +57,11 @@ export class IndexedDBGoalRepository implements GoalRepository {
     return movements.sort((a, b) => b.date.localeCompare(a.date));
   }
 
+  async getMovementById(id: string): Promise<GoalMovement | null> {
+    const movement = await this.database.goalMovements.get(id);
+    return movement ?? null;
+  }
+
   async getMovementsByGoalId(goalId: string): Promise<GoalMovement[]> {
     const movements = await this.database.goalMovements
       .where('goalId')
