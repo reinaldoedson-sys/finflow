@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
-import { InvestmentAsset, InvestmentTransactionType } from '../types/finance';
+import { InvestmentTransactionType } from '../types/finance';
 import { formatCurrency, formatDateShort } from '../utils/currency';
 import { 
   calculateTransactionTotal, 
@@ -14,7 +14,6 @@ import {
   Trash2, 
   Calendar, 
   FileText, 
-  DollarSign, 
   ArrowUpRight, 
   ArrowDownRight, 
   Coins, 

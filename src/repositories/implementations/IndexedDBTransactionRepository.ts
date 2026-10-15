@@ -9,14 +9,16 @@ import type {
 export class IndexedDBTransactionRepository implements TransactionRepository {
   constructor(private database: FinFlowDatabase = db) {}
 
-  async getAll(): Promise<Transaction[]> {
+  async getAll(includeDeleted = false): Promise<Transaction[]> {
     const items = await this.database.transactions.toArray();
-    return items.filter(t => !(t as any).deleted).sort((a, b) => b.date.localeCompare(a.date));
+    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
-  async getById(id: string): Promise<Transaction | null> {
+  async getById(id: string, includeDeleted = false): Promise<Transaction | null> {
     const item = await this.database.transactions.get(id);
-    if (!item || (item as any).deleted) return null;
+    if (!item) return null;
+    if (!includeDeleted && (item as any).deleted) return null;
     return item;
   }
 
@@ -30,7 +32,18 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.database.transactions.delete(id);
+    // Soft delete por padrão para preservar integridade do ledger e sincronização
+    const existing = await this.database.transactions.get(id);
+    if (existing) {
+      await this.database.transactions.put({
+        ...existing,
+        deleted: true,
+        deletedAt: new Date().toISOString(),
+        tombstoneRevision: ((existing as any)?.tombstoneRevision || (existing as any)?.revision || 1) + 1,
+      } as any);
+    } else {
+      await this.database.transactions.delete(id);
+    }
   }
 
   async replaceAll(items: Transaction[]): Promise<void> {
@@ -46,12 +59,13 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
     await this.database.transactions.clear();
   }
 
-  async count(): Promise<number> {
+  async count(includeDeleted = false): Promise<number> {
     const items = await this.database.transactions.toArray();
+    if (includeDeleted) return items.length;
     return items.filter(t => !(t as any).deleted).length;
   }
 
-  async getByDateRange(startDate?: string, endDate?: string): Promise<Transaction[]> {
+  async getByDateRange(startDate?: string, endDate?: string, includeDeleted = false): Promise<Transaction[]> {
     let collection = this.database.transactions.toCollection();
 
     if (startDate && endDate) {
@@ -63,14 +77,15 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
     }
 
     const items = await collection.toArray();
-    return items.filter(t => !(t as any).deleted).sort((a, b) => {
+    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    return filtered.sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
       return (b.id || '').localeCompare(a.id || '');
     });
   }
 
-  async getByMonth(yearMonth: string): Promise<Transaction[]> {
+  async getByMonth(yearMonth: string, includeDeleted = false): Promise<Transaction[]> {
     // Ano-mês no formato YYYY-MM
     const start = `${yearMonth}-01`;
     const end = `${yearMonth}-31\uffff`;
@@ -79,29 +94,32 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
       .between(start, end, true, true)
       .toArray();
 
-    return items.filter(t => !(t as any).deleted).sort((a, b) => {
+    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    return filtered.sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
       return (b.id || '').localeCompare(a.id || '');
     });
   }
 
-  async getByAccountId(accountId: string): Promise<Transaction[]> {
+  async getByAccountId(accountId: string, includeDeleted = false): Promise<Transaction[]> {
     const items = await this.database.transactions
       .where('accountId')
       .equals(accountId)
       .toArray();
 
-    return items.filter(t => !(t as any).deleted).sort((a, b) => b.date.localeCompare(a.date));
+    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
-  async getByCreditCardId(creditCardId: string): Promise<Transaction[]> {
+  async getByCreditCardId(creditCardId: string, includeDeleted = false): Promise<Transaction[]> {
     const items = await this.database.transactions
       .where('creditCardId')
       .equals(creditCardId)
       .toArray();
 
-    return items.filter(t => !(t as any).deleted).sort((a, b) => b.date.localeCompare(a.date));
+    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   async getPaged(options: TransactionPagedOptions = {}): Promise<TransactionPagedResult> {

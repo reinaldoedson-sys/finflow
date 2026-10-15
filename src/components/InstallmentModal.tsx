@@ -5,18 +5,14 @@ import { formatCurrency } from '../utils/currency';
 import { 
   X, 
   Calendar, 
-  CreditCard as CardIcon, 
   ArrowDownRight, 
   ArrowUpRight, 
   Calculator, 
   AlertCircle,
   Sparkles,
   Layers,
-  Plus,
-  Coins,
-  Check
+  Coins
 } from 'lucide-react';
-import { CategoryIcon } from './CategoryIcon';
 
 interface InstallmentModalProps {
   isOpen: boolean;

@@ -8,7 +8,9 @@ export type SyncEntityName =
   | 'investmentTransactions'
   | 'goals'
   | 'goalMovements'
-  | 'budgets';
+  | 'budgets'
+  | 'categories'
+  | 'installmentPlans';
 
 export type SyncActionType = 'create' | 'update' | 'delete';
 

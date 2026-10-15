@@ -101,7 +101,7 @@ console.log('--- INICIANDO TESTES DO DOMÍNIO DE INVESTIMENTOS (ETAPA 1) ---');
   let threwDirectSum = false;
   try {
     calculatePortfolioValue(mixedPortfolio);
-  } catch (err: any) {
+  } catch {
     threwDirectSum = true;
   }
   assert(threwDirectSum, 'Teste F: Soma direta de carteira com moedas mistas (BRL e USD) lança exceção com sucesso');
@@ -109,7 +109,7 @@ console.log('--- INICIANDO TESTES DO DOMÍNIO DE INVESTIMENTOS (ETAPA 1) ---');
   let threwDirectCost = false;
   try {
     calculatePortfolioCost(mixedPortfolio);
-  } catch (err: any) {
+  } catch {
     threwDirectCost = true;
   }
   assert(threwDirectCost, 'Teste F: Custo direto de carteira com moedas mistas lança exceção com sucesso');

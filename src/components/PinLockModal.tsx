@@ -2,32 +2,80 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSecurity } from '../context/SecurityContext';
 import { Shield, Delete, AlertCircle, Lock } from 'lucide-react';
 
+function formatRemainingTime(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+}
+
 export const PinLockModal: React.FC = () => {
-  const { isLocked, unlockWithPin } = useSecurity();
+  const { isLocked, unlockWithPin, lockedUntil } = useSecurity();
   const [pin, setPin] = useState<string>('');
   const [error, setError] = useState<boolean>(false);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
+    if (lockedUntil && lockedUntil > Date.now()) {
+      return Math.ceil((lockedUntil - Date.now()) / 1000);
+    }
+    return 0;
+  });
+
+  const isBlocked = remainingSeconds > 0;
+
+  // Countdown timer for lockout
+  useEffect(() => {
+    if (!lockedUntil || lockedUntil <= Date.now()) {
+      setRemainingSeconds(0);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const diff = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (diff <= 0) {
+        setRemainingSeconds(0);
+      } else {
+        setRemainingSeconds(diff);
+      }
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [lockedUntil]);
+
+  // Clear typed PIN when blocked
+  useEffect(() => {
+    if (isBlocked && pin.length > 0) {
+      setPin('');
+    }
+  }, [isBlocked, pin.length]);
 
   const handleKeyPress = useCallback((digit: string) => {
+    if (isBlocked) return;
     if (pin.length < 4) {
       setPin(prev => prev + digit);
       setError(false);
     }
-  }, [pin]);
+  }, [pin, isBlocked]);
 
   const handleDelete = useCallback(() => {
+    if (isBlocked) return;
     setPin(prev => prev.slice(0, -1));
     setError(false);
-  }, []);
+  }, [isBlocked]);
 
   const handleClear = useCallback(() => {
+    if (isBlocked) return;
     setPin('');
     setError(false);
-  }, []);
+  }, [isBlocked]);
 
   // Keyboard support for desktop users
   useEffect(() => {
-    if (!isLocked) return;
+    if (!isLocked || isBlocked) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (/^[0-9]$/.test(e.key)) {
@@ -41,11 +89,11 @@ export const PinLockModal: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLocked, handleKeyPress, handleDelete, handleClear]);
+  }, [isLocked, isBlocked, handleKeyPress, handleDelete, handleClear]);
 
   // When 4 digits are entered, auto-verify
   useEffect(() => {
-    if (pin.length === 4) {
+    if (pin.length === 4 && !isBlocked) {
       setIsVerifying(true);
       unlockWithPin(pin).then((success) => {
         setIsVerifying(false);
@@ -55,7 +103,7 @@ export const PinLockModal: React.FC = () => {
         }
       });
     }
-  }, [pin, unlockWithPin]);
+  }, [pin, unlockWithPin, isBlocked]);
 
   if (!isLocked) return null;
 
@@ -92,12 +140,17 @@ export const PinLockModal: React.FC = () => {
           })}
         </div>
 
-        {error && (
+        {isBlocked ? (
+          <div className="flex items-center gap-1.5 text-xs text-amber-400 mb-6 font-medium text-center">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>Muitas tentativas. Tente novamente em {formatRemainingTime(remainingSeconds)}</span>
+          </div>
+        ) : error ? (
           <div className="flex items-center gap-1.5 text-xs text-red-400 mb-6 font-medium">
             <AlertCircle className="w-3.5 h-3.5" />
             <span>PIN incorreto. Tente novamente.</span>
           </div>
-        )}
+        ) : null}
 
         {/* Keypad */}
         <div className="grid grid-cols-3 gap-3 w-full max-w-[280px]">
@@ -105,9 +158,9 @@ export const PinLockModal: React.FC = () => {
             <button
               key={num}
               type="button"
-              disabled={isVerifying}
+              disabled={isVerifying || isBlocked}
               onClick={() => handleKeyPress(String(num))}
-              className="h-14 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 active:scale-95 text-xl font-mono font-medium text-slate-100 transition-all focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+              className="h-14 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 active:scale-95 text-xl font-mono font-medium text-slate-100 transition-all focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-slate-900/90 disabled:hover:border-slate-800 disabled:active:scale-100"
             >
               {num}
             </button>
@@ -115,27 +168,27 @@ export const PinLockModal: React.FC = () => {
 
           <button
             type="button"
-            disabled={isVerifying}
+            disabled={isVerifying || isBlocked}
             onClick={handleClear}
-            className="h-14 rounded-xl bg-slate-900/40 border border-transparent hover:border-slate-800 text-xs font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center focus:outline-none"
+            className="h-14 rounded-xl bg-slate-900/40 border border-transparent hover:border-slate-800 text-xs font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Limpar
           </button>
 
           <button
             type="button"
-            disabled={isVerifying}
+            disabled={isVerifying || isBlocked}
             onClick={() => handleKeyPress('0')}
-            className="h-14 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 active:scale-95 text-xl font-mono font-medium text-slate-100 transition-all focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+            className="h-14 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 active:scale-95 text-xl font-mono font-medium text-slate-100 transition-all focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-slate-900/90 disabled:hover:border-slate-800 disabled:active:scale-100"
           >
             0
           </button>
 
           <button
             type="button"
-            disabled={isVerifying || pin.length === 0}
+            disabled={isVerifying || isBlocked || pin.length === 0}
             onClick={handleDelete}
-            className="h-14 rounded-xl bg-slate-900/40 border border-transparent hover:border-slate-800 text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center focus:outline-none"
+            className="h-14 rounded-xl bg-slate-900/40 border border-transparent hover:border-slate-800 text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Delete className="w-5 h-5" />
           </button>

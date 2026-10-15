@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { InvestmentAsset, AssetClass } from '../types/finance';
@@ -23,7 +23,8 @@ import {
   History,
   Cloud,
   CloudOff,
-  LogIn
+  LogIn,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { InvestmentTransactionModal } from '../components/InvestmentTransactionModal';
@@ -46,6 +47,7 @@ import {
 interface InvestmentsViewProps {
   onOpenNewInvestment: () => void;
   onEditInvestment: (asset: InvestmentAsset) => void;
+  onNavigateToPortfolio?: () => void;
 }
 
 const ASSET_TYPE_LABELS: Record<AssetClass, { label: string; color: string; bg: string }> = {
@@ -60,6 +62,7 @@ const ASSET_TYPE_LABELS: Record<AssetClass, { label: string; color: string; bg: 
 export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
   onOpenNewInvestment,
   onEditInvestment,
+  onNavigateToPortfolio,
 }) => {
   const { 
     investments, 
@@ -96,11 +99,39 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
   };
 
   // Mantém os dados do ativo do modal de detalhes atualizados quando houver aportes ou mudanças
+  const selectedDetailAssetRef = useRef(selectedDetailAsset);
+  selectedDetailAssetRef.current = selectedDetailAsset;
+
   useEffect(() => {
-    if (selectedDetailAsset) {
-      const updated = investments.find(a => a.id === selectedDetailAsset.id);
+    if (selectedDetailAssetRef.current) {
+      const updated = investments.find(a => a.id === selectedDetailAssetRef.current?.id);
       if (updated) {
         setSelectedDetailAsset(updated);
+      }
+    }
+  }, [investments]);
+
+  // Atualiza cotações automaticamente ao entrar na aba de investimentos se houver ativos desatualizados
+  const isRefreshingQuotesRef = useRef(isRefreshingQuotes);
+  isRefreshingQuotesRef.current = isRefreshingQuotes;
+
+  const refreshInvestmentQuotesRef = useRef(refreshInvestmentQuotes);
+  refreshInvestmentQuotesRef.current = refreshInvestmentQuotes;
+
+  const hasCheckedQuotesOnMountRef = useRef(false);
+
+  useEffect(() => {
+    if (hasCheckedQuotesOnMountRef.current || investments.length === 0) return;
+    hasCheckedQuotesOnMountRef.current = true;
+    const autoAssets = investments.filter(inv => inv.autoUpdate && inv.ticker);
+    if (autoAssets.length > 0) {
+      const needsUpdate = autoAssets.some(inv => {
+        if (!inv.lastPriceUpdate) return true;
+        const diff = Date.now() - new Date(inv.lastPriceUpdate).getTime();
+        return diff > 5 * 60 * 1000;
+      });
+      if (needsUpdate && !isRefreshingQuotesRef.current) {
+        refreshInvestmentQuotesRef.current();
       }
     }
   }, [investments]);
@@ -163,7 +194,19 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            {onNavigateToPortfolio && (
+              <button
+                onClick={onNavigateToPortfolio}
+                className="px-3 py-2 text-xs font-bold text-emerald-300 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                title="Abrir o Monitor de Ativos executivo"
+              >
+                <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Monitor de Ativos</span>
+                <span className="sm:hidden">Monitor</span>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 setSelectedTxAssetId(null);

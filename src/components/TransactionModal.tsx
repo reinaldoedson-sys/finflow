@@ -15,7 +15,6 @@ import {
   Sparkles,
   Calculator 
 } from 'lucide-react';
-import { CategoryIcon } from './CategoryIcon';
 
 interface TransactionModalProps {
   isOpen: boolean;

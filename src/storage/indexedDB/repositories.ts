@@ -9,6 +9,7 @@ import type {
   GoalMovement,
   InstallmentPlan,
   Budget,
+  Category,
 } from '../../types/finance';
 
 export interface AllFinancialData {
@@ -21,6 +22,7 @@ export interface AllFinancialData {
   goalMovements: GoalMovement[];
   installmentPlans: InstallmentPlan[];
   budgets: Budget[];
+  categories: Category[];
 }
 
 export type StorageCollectionName =
@@ -32,7 +34,8 @@ export type StorageCollectionName =
   | 'goals'
   | 'goalMovements'
   | 'installmentPlans'
-  | 'budgets';
+  | 'budgets'
+  | 'categories';
 
 /**
  * Carrega todos os registros das tabelas financeiras do IndexedDB.
@@ -52,6 +55,7 @@ export async function loadAllFinancialEntities(
       goalMovements,
       installmentPlans,
       budgets,
+      categories,
     ] = await Promise.all([
       database.transactions.toArray(),
       database.accounts.toArray(),
@@ -62,18 +66,20 @@ export async function loadAllFinancialEntities(
       database.goalMovements.toArray(),
       database.installmentPlans.toArray(),
       database.budgets.toArray(),
+      database.categories.toArray(),
     ]);
 
     return {
-      transactions,
-      accounts,
-      creditCards,
-      investments,
-      investmentTransactions,
-      goals,
-      goalMovements,
-      installmentPlans,
-      budgets,
+      transactions: transactions.filter(t => !(t as any).deleted),
+      accounts: accounts.filter(a => !(a as any).deleted),
+      creditCards: creditCards.filter(c => !(c as any).deleted),
+      investments: investments.filter(i => !(i as any).deleted),
+      investmentTransactions: investmentTransactions.filter(it => !(it as any).deleted),
+      goals: goals.filter(g => !(g as any).deleted),
+      goalMovements: goalMovements.filter(gm => !(gm as any).deleted),
+      installmentPlans: installmentPlans.filter(p => !(p as any).deleted),
+      budgets: budgets.filter(b => !(b as any).deleted),
+      categories: categories.filter(c => !(c as any).deleted),
     };
   } catch (error) {
     console.error('[IndexedDB Repository] Erro ao carregar dados do IndexedDB:', error);
@@ -167,6 +173,7 @@ export async function clearAllFinancialEntities(
         database.goalMovements,
         database.installmentPlans,
         database.budgets,
+        database.categories,
       ],
       async () => {
         await database.transactions.clear();
@@ -178,6 +185,7 @@ export async function clearAllFinancialEntities(
         await database.goalMovements.clear();
         await database.installmentPlans.clear();
         await database.budgets.clear();
+        await database.categories.clear();
       }
     );
     return true;

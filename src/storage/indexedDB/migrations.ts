@@ -9,6 +9,7 @@ import type {
   GoalMovement,
   InstallmentPlan,
   Budget,
+  Category,
 } from '../../types/finance';
 
 export const MIGRATION_FLAG_KEY = 'finflow_app_migrated_to_indexeddb_v1';
@@ -27,6 +28,7 @@ export interface MigrationResult {
     goalMovements: number;
     installmentPlans: number;
     budgets: number;
+    categories: number;
   };
   error?: string;
 }
@@ -62,6 +64,7 @@ export async function migrateFromLocalStorageIfAvailable(
     goalMovements: 0,
     installmentPlans: 0,
     budgets: 0,
+    categories: 0,
   };
 
   try {
@@ -84,6 +87,7 @@ export async function migrateFromLocalStorageIfAvailable(
     const goalMovements = safeParseLocalStorage<GoalMovement>('goal_movements');
     const installmentPlans = safeParseLocalStorage<InstallmentPlan>('installment_plans');
     const budgets = safeParseLocalStorage<Budget>('budgets');
+    const categories = safeParseLocalStorage<Category>('categories');
 
     const totalItems =
       transactions.length +
@@ -94,7 +98,8 @@ export async function migrateFromLocalStorageIfAvailable(
       goals.length +
       goalMovements.length +
       installmentPlans.length +
-      budgets.length;
+      budgets.length +
+      categories.length;
 
     // Se houver itens a migrar, executa transação no Dexie
     if (totalItems > 0) {
@@ -110,6 +115,7 @@ export async function migrateFromLocalStorageIfAvailable(
           database.goalMovements,
           database.installmentPlans,
           database.budgets,
+          database.categories,
         ],
         async () => {
           if (transactions.length > 0) await database.transactions.bulkPut(transactions);
@@ -121,6 +127,7 @@ export async function migrateFromLocalStorageIfAvailable(
           if (goalMovements.length > 0) await database.goalMovements.bulkPut(goalMovements);
           if (installmentPlans.length > 0) await database.installmentPlans.bulkPut(installmentPlans);
           if (budgets.length > 0) await database.budgets.bulkPut(budgets);
+          if (categories.length > 0) await database.categories.bulkPut(categories);
         }
       );
     }
@@ -141,6 +148,7 @@ export async function migrateFromLocalStorageIfAvailable(
         goalMovements: goalMovements.length,
         installmentPlans: installmentPlans.length,
         budgets: budgets.length,
+        categories: categories.length,
       },
     };
   } catch (error) {

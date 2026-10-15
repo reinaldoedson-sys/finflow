@@ -24,7 +24,8 @@ import {
   PiggyBank,
   Target,
   BarChart3,
-  LineChart
+  LineChart,
+  Activity
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -41,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
 }) => {
   const { hideValues, toggleHideValues, isPinEnabled, lockApp } = useSecurity();
-  const { selectedMonth, goToPreviousMonth, goToNextMonth, isCloudSynced, syncStatus, pendingSyncCount, retrySync } = useFinance();
+  const { selectedMonth, goToPreviousMonth, goToNextMonth, syncStatus } = useFinance();
   const { currentUser, signInWithGoogle, logout } = useAuth();
   
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -51,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'transactions', label: 'Transações', icon: ArrowLeftRight },
     { id: 'accounts', label: 'Contas & Cartões', icon: Wallet },
+    { id: 'portfolio', label: 'Monitor de Ativos', icon: Activity },
     { id: 'investments', label: 'Investimentos', icon: LineChart },
     { id: 'installments', label: 'Parcelamentos', icon: CreditCard },
     { id: 'budgets', label: 'Orçamentos', icon: PiggyBank },

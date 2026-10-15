@@ -1,5 +1,5 @@
-import { Account, CreditCard, Transaction, FinancialGoal } from '../types/finance';
-import { toCents, fromCents, addMoney, subtractMoney } from './money';
+import { Account, CreditCard, Transaction } from '../types/finance';
+import { toCents, fromCents } from './money';
 
 /**
  * Fonte única de verdade para saldo de conta bancária.
@@ -161,7 +161,7 @@ export function calculateGoalBalance(
 ): number {
   let totalCents = toCents(initialAmount || 0);
   for (const m of movements) {
-    if (m.type === 'withdrawal' || (m.type as any) === 'withdraw' || m.amount < 0) {
+    if (m.type === 'withdrawal' || (m.type as GoalMovementType | 'withdraw') === 'withdraw' || m.amount < 0) {
       totalCents -= toCents(Math.abs(m.amount));
     } else {
       totalCents += toCents(Math.abs(m.amount));
@@ -195,7 +195,7 @@ export function resolveGoalInitialAmount(
 
   let netMovementsCents = 0;
   for (const m of movements) {
-    if (m.type === 'withdrawal' || (m.type as any) === 'withdraw' || m.amount < 0) {
+    if (m.type === 'withdrawal' || (m.type as GoalMovementType | 'withdraw') === 'withdraw' || m.amount < 0) {
       netMovementsCents -= toCents(Math.abs(m.amount));
     } else {
       netMovementsCents += toCents(Math.abs(m.amount));

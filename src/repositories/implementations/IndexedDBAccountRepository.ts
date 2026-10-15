@@ -28,7 +28,18 @@ export class IndexedDBAccountRepository implements AccountRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.database.accounts.delete(id);
+    // Soft delete por padrão para preservar integridade referencial com transações
+    const existing = await this.database.accounts.get(id);
+    if (existing) {
+      await this.database.accounts.put({
+        ...existing,
+        deleted: true,
+        deletedAt: new Date().toISOString(),
+        tombstoneRevision: ((existing as any)?.tombstoneRevision || (existing as any)?.revision || 1) + 1,
+      } as any);
+    } else {
+      await this.database.accounts.delete(id);
+    }
   }
 
   async replaceAll(items: Account[]): Promise<void> {

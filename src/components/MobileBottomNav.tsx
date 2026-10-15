@@ -10,6 +10,7 @@ import {
   BarChart3,
   Settings,
   LineChart,
+  Activity,
   X
 } from 'lucide-react';
 
@@ -22,7 +23,7 @@ interface MobileBottomNavProps {
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   currentTab,
   onTabChange,
-  onOpenNewTransaction,
+  onOpenNewTransaction: _onOpenNewTransaction,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
@@ -34,6 +35,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   ];
 
   const moreItems = [
+    { id: 'portfolio', label: 'Monitor de Ativos', icon: Activity, desc: 'Classes, setores, proventos e retorno' },
     { id: 'investments', label: 'Investimentos & Cotações', icon: LineChart, desc: 'B3, FIIs, Cripto e Renda Fixa ao vivo' },
     { id: 'budgets', label: 'Orçamentos & Teto', icon: PiggyBank, desc: 'Limites mensais por categoria' },
     { id: 'goals', label: 'Metas & Cofrinhos', icon: Target, desc: 'Aportes e reservas financeiras' },
@@ -46,7 +48,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     setShowMoreMenu(false);
   };
 
-  const isMoreActive = ['investments', 'budgets', 'goals', 'reports', 'settings'].includes(currentTab);
+  const isMoreActive = ['portfolio', 'investments', 'budgets', 'goals', 'reports', 'settings'].includes(currentTab);
 
   return (
     <>

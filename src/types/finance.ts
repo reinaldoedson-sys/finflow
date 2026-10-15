@@ -2,7 +2,14 @@ export type TransactionType = 'expense' | 'income' | 'transfer';
 
 export type PaymentMethod = 'pix' | 'credit_card' | 'debit_card' | 'bank_slip' | 'cash' | 'transfer';
 
-export interface Category {
+export interface SyncMetadata {
+  deleted?: boolean;
+  deletedAt?: string;
+  tombstoneRevision?: number;
+  revision?: number;
+}
+
+export interface Category extends SyncMetadata {
   id: string;
   name: string;
   icon: string;
@@ -10,7 +17,7 @@ export interface Category {
   type: 'expense' | 'income' | 'both';
 }
 
-export interface Account {
+export interface Account extends SyncMetadata {
   id: string;
   name: string;
   type: 'checking' | 'savings' | 'investment' | 'cash';
@@ -21,7 +28,7 @@ export interface Account {
   icon: string;
 }
 
-export interface CreditCard {
+export interface CreditCard extends SyncMetadata {
   id: string;
   name: string;
   bankName: string;
@@ -32,7 +39,7 @@ export interface CreditCard {
   currentInvoice: number;
 }
 
-export interface Transaction {
+export interface Transaction extends SyncMetadata {
   id: string;
   description: string;
   amount: number;
@@ -56,7 +63,7 @@ export interface Transaction {
   createdAt: string;
 }
 
-export interface InstallmentPlan {
+export interface InstallmentPlan extends SyncMetadata {
   id: string;
   description: string;
   totalAmount: number;
@@ -72,7 +79,7 @@ export interface InstallmentPlan {
   createdAt: string;
 }
 
-export interface Budget {
+export interface Budget extends SyncMetadata {
   id: string;
   categoryId: string;
   month: string; // YYYY-MM
@@ -81,7 +88,7 @@ export interface Budget {
 
 export type GoalMovementType = 'deposit' | 'withdrawal';
 
-export interface GoalMovement {
+export interface GoalMovement extends SyncMetadata {
   id: string;
   goalId: string;
   type: GoalMovementType;
@@ -91,7 +98,7 @@ export interface GoalMovement {
   notes?: string;
 }
 
-export interface FinancialGoal {
+export interface FinancialGoal extends SyncMetadata {
   id: string;
   name: string;
   targetAmount: number;
@@ -105,15 +112,17 @@ export interface FinancialGoal {
 
 export interface SecuritySettings {
   isPinEnabled: boolean;
-  pinHash?: string; // SHA-256 hash do PIN de 4 dígitos
+  pinHash?: string; // Hash do PIN (PBKDF2-SHA256 ou legado SHA-256)
   autoLockMinutes: number; // 0 = imediato, 1, 5, 15, 0 = desativado
   hideValuesByDefault: boolean;
   lastUnlockedAt?: number;
+  failedAttempts?: number;
+  lockedUntil?: number; // timestamp em ms
 }
 
 export type AssetClass = 'stock' | 'fii' | 'crypto' | 'fixed_income' | 'bdr_etf' | 'other';
 
-export interface InvestmentAsset {
+export interface InvestmentAsset extends SyncMetadata {
   id: string;
   ticker: string;              // ex: PETR4, VALE3, MXRF11, BTC, Tesouro Selic 2029
   name: string;                // ex: Petrobras PN, Vale S.A., Maxi Renda, Bitcoin
@@ -125,6 +134,7 @@ export interface InvestmentAsset {
   changePercent?: number;      // Variação % do dia
   currency: 'BRL' | 'USD';
   institution?: string;        // Corretora ou Banco (XP, NuInvest, Rico, BTG, Binance)
+  sector?: string;             // Setor da Ação ou Segmento do FII (ex: Bancário, Petróleo & Gás, Logística, Papel/CRI)
   autoUpdate: boolean;         // Se atualiza preço automaticamente via cotação online
   lastPriceUpdate?: string;    // Data e hora da última cotação obtida
   notes?: string;
@@ -133,7 +143,7 @@ export interface InvestmentAsset {
 
 export type InvestmentTransactionType = 'buy' | 'sell' | 'dividend';
 
-export interface InvestmentTransaction {
+export interface InvestmentTransaction extends SyncMetadata {
   id: string;
   assetId: string;
   type: InvestmentTransactionType;

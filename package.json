@@ -1,25 +1,24 @@
 {
-  "name": "react-example",
+  "name": "finflow",
+  "description": "Aplicativo de gestão de finanças pessoais PWA com armazenamento local e sincronização opcional.",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "test": "tsx test/creditCardInvoice.test.ts && tsx test/derivedFields.test.ts && tsx test/sync.test.ts && tsx test/goalLedger.test.ts && tsx test/goalLedgerEtapa7.test.ts && tsx test/investments.test.ts && tsx test/investmentRulesEtapa8.test.ts && tsx test/investmentTransactions.test.ts && tsx test/investmentAporte.test.ts && tsx test/goalPersistenceAndReset.test.ts && tsx test/investmentAporteFlow.test.ts && tsx test/investmentPosition.test.ts && tsx test/investmentLedgerIntegration.test.ts && tsx test/indexedDbMigration.test.ts && tsx test/indexedDBRepositories.test.ts && tsx test/syncService.test.ts && tsx test/multiEntityHardening.test.ts && tsx test/investmentMigrationEtapa28.test.ts",
-    "lint": "tsc --noEmit"
+    "clean": "rm -rf dist",
+    "test": "tsx test/creditCardInvoice.test.ts && tsx test/derivedFields.test.ts && tsx test/sync.test.ts && tsx test/goalLedger.test.ts && tsx test/goalLedgerEtapa7.test.ts && tsx test/investments.test.ts && tsx test/investmentRulesEtapa8.test.ts && tsx test/investmentTransactions.test.ts && tsx test/investmentAporte.test.ts && tsx test/goalPersistenceAndReset.test.ts && tsx test/investmentAporteFlow.test.ts && tsx test/investmentPosition.test.ts && tsx test/investmentLedgerIntegration.test.ts && tsx test/indexedDbMigration.test.ts && tsx test/indexedDBRepositories.test.ts && tsx test/syncService.test.ts && tsx test/multiEntityHardening.test.ts && tsx test/investmentMigrationEtapa28.test.ts && tsx test/tombstoneHardening.test.ts && tsx test/goalsAndBudgetsMigration.test.ts && tsx test/categoriesAndInstallmentsMigration.test.ts && tsx test/backupAndDemoServices.test.ts && tsx test/firestoreSyncHook.test.ts && tsx test/accountApplicationService.test.ts && tsx test/pinSecurity.test.ts && tsx test/quotesProvider.test.ts && tsx test/backupCrypto.test.ts",
+    "lint": "tsc --noEmit",
+    "lint:eslint": "eslint src server test"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/canvas-confetti": "^1.9.0",
     "@vitejs/plugin-react": "^6.1.1",
     "canvas-confetti": "^1.9.4",
     "dexie": "^4.4.6",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
     "firebase": "^12.19.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
@@ -28,16 +27,20 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
+    "globals": "^17.13.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1",
     "vite-plugin-pwa": "^2.0.0"
   }
 }

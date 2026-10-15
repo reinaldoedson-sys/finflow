@@ -3,9 +3,7 @@ import { InvestmentAsset, InvestmentTransaction } from '../src/types/finance';
 import {
   calculateInvestmentPosition,
   calculateAllInvestmentPositions,
-  sortInvestmentTransactionsChronologically,
-  InsufficientPositionError,
-  DerivedInvestmentPosition
+  InsufficientPositionError
 } from '../src/domain/investmentPosition';
 
 console.log('--- INICIANDO TESTES DO MOTOR DE POSIÇÃO DE INVESTIMENTOS (ETAPA 10.1) ---');

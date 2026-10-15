@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
-import { InstallmentPlan, Transaction } from '../types/finance';
 import { formatCurrency, calculatePercentage, formatDateShort } from '../utils/currency';
 import { 
   CreditCard as CardIcon, 
@@ -10,12 +9,7 @@ import {
   ChevronDown, 
   ChevronUp, 
   CheckCircle2, 
-  Clock, 
-  Calendar, 
-  TrendingDown, 
-  AlertCircle,
-  ShoppingBag,
-  ArrowRight
+  Calendar
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
 
@@ -223,7 +217,7 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
         </div>
       ) : (
         <div className="space-y-3 sm:space-y-4">
-          {displayedPlans.map(({ plan, transactions: planTxs, paidCount, totalCount, progressPercent, paidAmount, remainingAmount, remainingCount, monthTx, endDate, isCompleted }) => {
+          {displayedPlans.map(({ plan, transactions: planTxs, paidCount, totalCount, progressPercent, remainingAmount, remainingCount, monthTx, endDate, isCompleted }) => {
             const cat = categories.find(c => c.id === plan.categoryId);
             const card = creditCards.find(c => c.id === plan.creditCardId);
             const acc = accounts.find(a => a.id === plan.accountId);

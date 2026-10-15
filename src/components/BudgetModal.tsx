@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { X } from 'lucide-react';
 
@@ -21,12 +21,14 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({
   const [error, setError] = useState('');
 
   const expenseCategories = categories.filter(c => c.type === 'expense' || c.type === 'both');
+  const expenseCategoriesRef = useRef(expenseCategories);
+  expenseCategoriesRef.current = expenseCategories;
 
   useEffect(() => {
     if (initialCatId) {
       setCategoryId(initialCatId);
-    } else if (expenseCategories.length > 0) {
-      setCategoryId(expenseCategories[0].id);
+    } else if (expenseCategoriesRef.current.length > 0) {
+      setCategoryId(expenseCategoriesRef.current[0].id);
     }
     setAmountStr(initialAmount ? String(initialAmount) : '');
     setError('');

@@ -9,6 +9,7 @@ import type {
   GoalMovement,
   InstallmentPlan,
   Budget,
+  Category,
 } from '../../types/finance';
 import type { SyncQueueItem } from '../../services/syncTypes';
 
@@ -22,6 +23,7 @@ export class FinFlowDatabase extends Dexie {
   goalMovements!: EntityTable<GoalMovement, 'id'>;
   installmentPlans!: EntityTable<InstallmentPlan, 'id'>;
   budgets!: EntityTable<Budget, 'id'>;
+  categories!: EntityTable<Category, 'id'>;
   syncQueue!: EntityTable<SyncQueueItem, 'id'>;
 
   constructor(databaseName = 'FinFlowDatabase') {
@@ -43,6 +45,11 @@ export class FinFlowDatabase extends Dexie {
     // Schema Version 2: Fila de Sincronização Local-First com persistência própria
     this.version(2).stores({
       syncQueue: 'id, operationId, entityName, entityId, timestamp, nextRetryAt',
+    });
+
+    // Schema Version 3: Suporte a Categorias no Dexie (Fase 2.3)
+    this.version(3).stores({
+      categories: 'id, type, name',
     });
   }
 }

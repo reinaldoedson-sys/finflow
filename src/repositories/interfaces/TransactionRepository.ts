@@ -28,22 +28,22 @@ export interface TransactionRepository extends BaseRepository<Transaction> {
    * Retorna transações filtradas por intervalo de datas (YYYY-MM-DD),
    * ordenadas decrescentemente por data.
    */
-  getByDateRange(startDate?: string, endDate?: string): Promise<Transaction[]>;
+  getByDateRange(startDate?: string, endDate?: string, includeDeleted?: boolean): Promise<Transaction[]>;
 
   /**
    * Retorna transações pertencentes a um mês específico (formato YYYY-MM).
    */
-  getByMonth(yearMonth: string): Promise<Transaction[]>;
+  getByMonth(yearMonth: string, includeDeleted?: boolean): Promise<Transaction[]>;
 
   /**
    * Retorna transações associadas a uma conta bancária específica.
    */
-  getByAccountId(accountId: string): Promise<Transaction[]>;
+  getByAccountId(accountId: string, includeDeleted?: boolean): Promise<Transaction[]>;
 
   /**
    * Retorna transações associadas a um cartão de crédito específico.
    */
-  getByCreditCardId(creditCardId: string): Promise<Transaction[]>;
+  getByCreditCardId(creditCardId: string, includeDeleted?: boolean): Promise<Transaction[]>;
 
   /**
    * Realiza consulta paginada local com filtros opcionais.

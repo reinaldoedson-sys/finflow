@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
-import { InvestmentAsset, InvestmentTransaction, InvestmentTransactionType } from '../types/finance';
+import { InvestmentAsset } from '../types/finance';
 import { formatCurrency, formatDateShort } from '../utils/currency';
 import { 
   calculateInvestmentCost, 
@@ -21,16 +21,7 @@ import {
   Trash2, 
   Building2, 
   Calendar, 
-  Coins, 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  FileText,
-  DollarSign,
-  PieChart,
-  RefreshCw,
-  PlusCircle,
-  Clock,
-  Sparkles
+  RefreshCw
 } from 'lucide-react';
 
 interface InvestmentDetailModalProps {

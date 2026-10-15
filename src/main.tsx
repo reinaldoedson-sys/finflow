@@ -87,28 +87,9 @@ class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
   }
 }
 
-// Register / update Service Worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
-      .then((registration) => {
-        // Check for updates
-        registration.update().catch(() => {});
-      })
-      .catch((err) => {
-        console.warn('SW registration fallback:', err);
-      });
-  });
-
-  // Reload when a new service worker takes over control
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) {
-      refreshing = true;
-      window.location.reload();
-    }
-  });
+// Limpeza única do cache legado 'finflow-v4' se existir
+if ('caches' in window) {
+  caches.delete('finflow-v4').catch(() => {});
 }
 
 createRoot(document.getElementById('root')!).render(

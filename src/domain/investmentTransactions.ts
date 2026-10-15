@@ -1,15 +1,15 @@
-import { InvestmentTransaction, InvestmentTransactionType } from '../types/finance';
+import { InvestmentTransaction } from '../types/finance';
 import { toCents, fromCents } from './money';
 import { generateId } from './id';
 
 export interface ValidateTransactionParams {
-  assetId?: any;
-  type?: any;
-  date?: any;
-  quantity?: any;
-  price?: any;
-  totalAmount?: any;
-  notes?: any;
+  assetId?: unknown;
+  type?: unknown;
+  date?: unknown;
+  quantity?: unknown;
+  price?: unknown;
+  totalAmount?: unknown;
+  notes?: unknown;
 }
 
 export interface ValidationResult {
@@ -96,8 +96,8 @@ export function validateInvestmentTransaction(
   }
 
   // 3. type obrigatório e restrito a 'buy', 'sell' ou 'dividend'
-  const validTypes: InvestmentTransactionType[] = ['buy', 'sell', 'dividend'];
-  if (!validTypes.includes(tx.type)) {
+  const validTypes: readonly string[] = ['buy', 'sell', 'dividend'];
+  if (typeof tx.type !== 'string' || !validTypes.includes(tx.type)) {
     return { isValid: false, error: 'Tipo de operação inválido. Permitido apenas: compra (buy), venda (sell) ou dividendo (dividend).' };
   }
 

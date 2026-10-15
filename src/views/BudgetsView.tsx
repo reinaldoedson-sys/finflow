@@ -2,7 +2,7 @@ import React from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { formatCurrency, calculatePercentage, getMonthLabel } from '../utils/currency';
-import { Plus, Edit2, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Plus, Edit2, CheckCircle, ShieldAlert } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
 
 interface BudgetsViewProps {

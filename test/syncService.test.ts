@@ -227,7 +227,7 @@ async function runTests() {
   console.log('\n--- 3. Testando FinancialSyncService ---');
 
   // Mock de CloudSyncProvider
-  let pushedItems: SyncQueueItem[] = [];
+  const pushedItems: SyncQueueItem[] = [];
   const mockCloud: CloudSyncProvider = {
     name: 'MockCloudProvider',
     push: async <T>(item: SyncQueueItem<T>): Promise<CloudSyncResult<T>> => {

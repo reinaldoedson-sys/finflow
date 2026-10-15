@@ -9,9 +9,7 @@ import {
   CreditCard as CardIcon, 
   ArrowUpRight, 
   ArrowDownRight, 
-  CheckCircle2, 
   Clock, 
-  AlertCircle,
   Plus,
   ArrowRight,
   ShieldCheck,
@@ -36,7 +34,7 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenNewTransaction,
   onOpenAccountModal,
-  onOpenBudgetModal,
+  onOpenBudgetModal: _onOpenBudgetModal,
   onOpenDepositModal,
   onSelectTransactionToEdit,
   onNavigateToTab,

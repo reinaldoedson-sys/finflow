@@ -53,7 +53,7 @@ service cloud.firestore {
           && isValidId(accountId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['name', 'bankName', 'type', 'color', 'initialBalance', 'userId'])
-          && incoming().keys().hasOnly(['name', 'bankName', 'type', 'color', 'initialBalance', 'currentBalance', 'icon', 'userId'])
+          && incoming().keys().hasOnly(['name', 'bankName', 'type', 'color', 'initialBalance', 'currentBalance', 'icon', 'userId', 'revision', 'updatedAt'])
           && incoming().name is string && incoming().name.size() <= 80
           && incoming().bankName is string && incoming().bankName.size() <= 80
           && incoming().type in ['checking', 'savings', 'investment', 'cash']
@@ -62,12 +62,12 @@ service cloud.firestore {
         allow update: if isOwner(userId)
           && incoming().userId == userId
           && incoming().userId == existing().userId
-          && incoming().keys().hasOnly(['name', 'bankName', 'type', 'color', 'initialBalance', 'currentBalance', 'icon', 'userId'])
-          && incoming().name is string && incoming().name.size() <= 80
-          && incoming().bankName is string && incoming().bankName.size() <= 80
-          && incoming().type in ['checking', 'savings', 'investment', 'cash']
-          && incoming().color is string && incoming().color.size() <= 16
-          && incoming().initialBalance is number;
+          && incoming().keys().hasOnly(['name', 'bankName', 'type', 'color', 'initialBalance', 'currentBalance', 'icon', 'userId', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
+          && (!('name' in incoming()) || (incoming().name is string && incoming().name.size() <= 80))
+          && (!('bankName' in incoming()) || (incoming().bankName is string && incoming().bankName.size() <= 80))
+          && (!('type' in incoming()) || incoming().type in ['checking', 'savings', 'investment', 'cash'])
+          && (!('color' in incoming()) || (incoming().color is string && incoming().color.size() <= 16))
+          && (!('initialBalance' in incoming()) || incoming().initialBalance is number);
       }
 
       // Subcollection: Credit Cards
@@ -77,7 +77,7 @@ service cloud.firestore {
           && isValidId(cardId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['name', 'bankName', 'color', 'limit', 'closingDay', 'dueDay', 'userId'])
-          && incoming().keys().hasOnly(['name', 'bankName', 'color', 'limit', 'closingDay', 'dueDay', 'currentInvoice', 'userId'])
+          && incoming().keys().hasOnly(['name', 'bankName', 'color', 'limit', 'closingDay', 'dueDay', 'currentInvoice', 'userId', 'revision', 'updatedAt'])
           && incoming().name is string && incoming().name.size() <= 80
           && incoming().bankName is string && incoming().bankName.size() <= 80
           && incoming().color is string && incoming().color.size() <= 16
@@ -88,13 +88,13 @@ service cloud.firestore {
           && isValidId(cardId)
           && incoming().userId == userId
           && incoming().userId == existing().userId
-          && incoming().keys().hasOnly(['name', 'bankName', 'color', 'limit', 'closingDay', 'dueDay', 'currentInvoice', 'userId'])
-          && incoming().name is string && incoming().name.size() <= 80
-          && incoming().bankName is string && incoming().bankName.size() <= 80
-          && incoming().color is string && incoming().color.size() <= 16
-          && incoming().limit is number && incoming().limit >= 0
-          && incoming().closingDay is number && incoming().closingDay >= 1 && incoming().closingDay <= 31
-          && incoming().dueDay is number && incoming().dueDay >= 1 && incoming().dueDay <= 31;
+          && incoming().keys().hasOnly(['name', 'bankName', 'color', 'limit', 'closingDay', 'dueDay', 'currentInvoice', 'userId', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
+          && (!('name' in incoming()) || (incoming().name is string && incoming().name.size() <= 80))
+          && (!('bankName' in incoming()) || (incoming().bankName is string && incoming().bankName.size() <= 80))
+          && (!('color' in incoming()) || (incoming().color is string && incoming().color.size() <= 16))
+          && (!('limit' in incoming()) || (incoming().limit is number && incoming().limit >= 0))
+          && (!('closingDay' in incoming()) || (incoming().closingDay is number && incoming().closingDay >= 1 && incoming().closingDay <= 31))
+          && (!('dueDay' in incoming()) || (incoming().dueDay is number && incoming().dueDay >= 1 && incoming().dueDay <= 31));
       }
 
       // Subcollection: Categories
@@ -104,7 +104,7 @@ service cloud.firestore {
           && isValidId(categoryId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['name', 'icon', 'color', 'type', 'userId'])
-          && incoming().keys().hasOnly(['name', 'icon', 'color', 'type', 'userId'])
+          && incoming().keys().hasOnly(['name', 'icon', 'color', 'type', 'userId', 'revision', 'updatedAt'])
           && incoming().name is string && incoming().name.size() <= 60
           && incoming().icon is string && incoming().icon.size() <= 32
           && incoming().color is string && incoming().color.size() <= 16
@@ -113,11 +113,11 @@ service cloud.firestore {
           && isValidId(categoryId)
           && incoming().userId == userId
           && incoming().userId == existing().userId
-          && incoming().keys().hasOnly(['name', 'icon', 'color', 'type', 'userId'])
-          && incoming().name is string && incoming().name.size() <= 60
-          && incoming().icon is string && incoming().icon.size() <= 32
-          && incoming().color is string && incoming().color.size() <= 16
-          && incoming().type in ['expense', 'income', 'both'];
+          && incoming().keys().hasOnly(['name', 'icon', 'color', 'type', 'userId', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
+          && (!('name' in incoming()) || (incoming().name is string && incoming().name.size() <= 60))
+          && (!('icon' in incoming()) || (incoming().icon is string && incoming().icon.size() <= 32))
+          && (!('color' in incoming()) || (incoming().color is string && incoming().color.size() <= 16))
+          && (!('type' in incoming()) || incoming().type in ['expense', 'income', 'both']);
       }
 
       // Subcollection: Budgets
@@ -127,7 +127,7 @@ service cloud.firestore {
           && isValidId(budgetId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['categoryId', 'month', 'limitAmount', 'userId'])
-          && incoming().keys().hasOnly(['categoryId', 'month', 'limitAmount', 'userId'])
+          && incoming().keys().hasOnly(['categoryId', 'month', 'limitAmount', 'userId', 'revision', 'updatedAt'])
           && incoming().categoryId is string && incoming().categoryId.size() <= 64
           && incoming().month is string && incoming().month.size() <= 7
           && incoming().limitAmount is number && incoming().limitAmount >= 0;
@@ -135,10 +135,10 @@ service cloud.firestore {
           && isValidId(budgetId)
           && incoming().userId == userId
           && incoming().userId == existing().userId
-          && incoming().keys().hasOnly(['categoryId', 'month', 'limitAmount', 'userId'])
-          && incoming().categoryId is string && incoming().categoryId.size() <= 64
-          && incoming().month is string && incoming().month.size() <= 7
-          && incoming().limitAmount is number && incoming().limitAmount >= 0;
+          && incoming().keys().hasOnly(['categoryId', 'month', 'limitAmount', 'userId', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
+          && (!('categoryId' in incoming()) || (incoming().categoryId is string && incoming().categoryId.size() <= 64))
+          && (!('month' in incoming()) || (incoming().month is string && incoming().month.size() <= 7))
+          && (!('limitAmount' in incoming()) || (incoming().limitAmount is number && incoming().limitAmount >= 0));
       }
 
       // Subcollection: Goals
@@ -148,7 +148,7 @@ service cloud.firestore {
           && isValidId(goalId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['name', 'targetAmount', 'currentAmount', 'targetDate', 'color', 'userId'])
-          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'initialAmount', 'targetDate', 'color', 'icon', 'notes', 'userId'])
+          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'initialAmount', 'targetDate', 'color', 'icon', 'notes', 'userId', 'revision', 'updatedAt'])
           && incoming().name is string && incoming().name.size() <= 80
           && incoming().targetAmount is number && incoming().targetAmount >= 0
           && incoming().currentAmount is number && incoming().currentAmount >= 0
@@ -159,13 +159,13 @@ service cloud.firestore {
           && isValidId(goalId)
           && incoming().userId == userId
           && incoming().userId == existing().userId
-          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'initialAmount', 'targetDate', 'color', 'icon', 'notes', 'userId'])
-          && incoming().name is string && incoming().name.size() <= 80
-          && incoming().targetAmount is number && incoming().targetAmount >= 0
-          && incoming().currentAmount is number && incoming().currentAmount >= 0
+          && incoming().keys().hasOnly(['name', 'targetAmount', 'currentAmount', 'initialAmount', 'targetDate', 'color', 'icon', 'notes', 'userId', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
+          && (!('name' in incoming()) || (incoming().name is string && incoming().name.size() <= 80))
+          && (!('targetAmount' in incoming()) || (incoming().targetAmount is number && incoming().targetAmount >= 0))
+          && (!('currentAmount' in incoming()) || (incoming().currentAmount is number && incoming().currentAmount >= 0))
           && (!('initialAmount' in incoming()) || (incoming().initialAmount is number && incoming().initialAmount >= 0))
-          && incoming().targetDate is string && incoming().targetDate.size() <= 10
-          && incoming().color is string && incoming().color.size() <= 16;
+          && (!('targetDate' in incoming()) || (incoming().targetDate is string && incoming().targetDate.size() <= 10))
+          && (!('color' in incoming()) || (incoming().color is string && incoming().color.size() <= 16));
       }
 
       // Subcollection: Goal Movements (Ledger de metas - Etapa 7)
@@ -175,7 +175,7 @@ service cloud.firestore {
           && isValidId(movementId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['goalId', 'type', 'amount', 'date', 'createdAt', 'userId'])
-          && incoming().keys().hasOnly(['goalId', 'type', 'amount', 'date', 'createdAt', 'notes', 'userId'])
+          && incoming().keys().hasOnly(['goalId', 'type', 'amount', 'date', 'createdAt', 'notes', 'userId', 'revision', 'updatedAt'])
           && incoming().goalId is string && incoming().goalId.size() <= 128
           && incoming().type in ['deposit', 'withdrawal']
           && incoming().amount is number && incoming().amount > 0
@@ -191,7 +191,7 @@ service cloud.firestore {
           && isValidId(planId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['description', 'totalAmount', 'installmentAmount', 'totalInstallments', 'type', 'accountId', 'paymentMethod', 'startDate', 'userId', 'createdAt'])
-          && incoming().keys().hasOnly(['description', 'totalAmount', 'installmentAmount', 'totalInstallments', 'type', 'categoryId', 'accountId', 'creditCardId', 'paymentMethod', 'startDate', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['description', 'totalAmount', 'installmentAmount', 'totalInstallments', 'type', 'categoryId', 'accountId', 'creditCardId', 'paymentMethod', 'startDate', 'userId', 'createdAt', 'revision', 'updatedAt'])
           && incoming().description is string && incoming().description.size() <= 120
           && incoming().totalAmount is number && incoming().totalAmount > 0
           && incoming().installmentAmount is number && incoming().installmentAmount > 0
@@ -204,7 +204,7 @@ service cloud.firestore {
           && incoming().userId == userId
           && incoming().userId == existing().userId
           && incoming().createdAt == existing().createdAt
-          && incoming().keys().hasOnly(['description', 'totalAmount', 'installmentAmount', 'totalInstallments', 'type', 'categoryId', 'accountId', 'creditCardId', 'paymentMethod', 'startDate', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['description', 'totalAmount', 'installmentAmount', 'totalInstallments', 'type', 'categoryId', 'accountId', 'creditCardId', 'paymentMethod', 'startDate', 'userId', 'createdAt', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
           && incoming().description is string && incoming().description.size() <= 120
           && incoming().totalAmount is number && incoming().totalAmount > 0
           && incoming().installmentAmount is number && incoming().installmentAmount > 0
@@ -220,7 +220,7 @@ service cloud.firestore {
           && isValidId(investmentId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'currency', 'userId', 'createdAt'])
-          && incoming().keys().hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'sector', 'userId', 'createdAt', 'revision', 'updatedAt'])
           && incoming().ticker is string && incoming().ticker.size() <= 32
           && incoming().name is string && incoming().name.size() <= 120
           && incoming().type in ['stock', 'fii', 'crypto', 'fixed_income', 'bdr_etf', 'other']
@@ -233,6 +233,7 @@ service cloud.firestore {
           && (!('autoUpdate' in incoming()) || incoming().autoUpdate is bool)
           && (!('institution' in incoming()) || (incoming().institution is string && incoming().institution.size() <= 80))
           && (!('notes' in incoming()) || (incoming().notes is string && incoming().notes.size() <= 500))
+          && (!('sector' in incoming()) || (incoming().sector is string && incoming().sector.size() <= 80))
           && (!('lastPriceUpdate' in incoming()) || (incoming().lastPriceUpdate is string && incoming().lastPriceUpdate.size() <= 64))
           && incoming().createdAt is string && incoming().createdAt.size() <= 64;
         allow update: if isOwner(userId)
@@ -240,7 +241,7 @@ service cloud.firestore {
           && incoming().userId == userId
           && incoming().userId == existing().userId
           && incoming().createdAt == existing().createdAt
-          && incoming().keys().hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'sector', 'userId', 'createdAt', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
           && incoming().ticker is string && incoming().ticker.size() <= 32
           && incoming().name is string && incoming().name.size() <= 120
           && incoming().type in ['stock', 'fii', 'crypto', 'fixed_income', 'bdr_etf', 'other']
@@ -253,6 +254,7 @@ service cloud.firestore {
           && (!('autoUpdate' in incoming()) || incoming().autoUpdate is bool)
           && (!('institution' in incoming()) || (incoming().institution is string && incoming().institution.size() <= 80))
           && (!('notes' in incoming()) || (incoming().notes is string && incoming().notes.size() <= 500))
+          && (!('sector' in incoming()) || (incoming().sector is string && incoming().sector.size() <= 80))
           && (!('lastPriceUpdate' in incoming()) || (incoming().lastPriceUpdate is string && incoming().lastPriceUpdate.size() <= 64));
       }
 
@@ -263,7 +265,7 @@ service cloud.firestore {
           && isValidId(transactionId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['description', 'amount', 'type', 'accountId', 'paymentMethod', 'date', 'status', 'userId', 'createdAt'])
-          && incoming().keys().hasOnly(['description', 'amount', 'type', 'categoryId', 'accountId', 'targetAccountId', 'creditCardId', 'paymentMethod', 'date', 'status', 'notes', 'tags', 'isRecurring', 'installmentPlanId', 'installments', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['description', 'amount', 'type', 'categoryId', 'accountId', 'targetAccountId', 'creditCardId', 'paymentMethod', 'date', 'status', 'notes', 'tags', 'isRecurring', 'installmentPlanId', 'installments', 'userId', 'createdAt', 'revision', 'updatedAt'])
           && incoming().description is string && incoming().description.size() <= 120
           && incoming().amount is number && incoming().amount > 0
           && incoming().type in ['expense', 'income', 'transfer']
@@ -277,7 +279,7 @@ service cloud.firestore {
           && incoming().userId == userId
           && incoming().userId == existing().userId
           && incoming().createdAt == existing().createdAt
-          && incoming().keys().hasOnly(['description', 'amount', 'type', 'categoryId', 'accountId', 'targetAccountId', 'creditCardId', 'paymentMethod', 'date', 'status', 'notes', 'tags', 'isRecurring', 'installmentPlanId', 'installments', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['description', 'amount', 'type', 'categoryId', 'accountId', 'targetAccountId', 'creditCardId', 'paymentMethod', 'date', 'status', 'notes', 'tags', 'isRecurring', 'installmentPlanId', 'installments', 'userId', 'createdAt', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
           && incoming().description is string && incoming().description.size() <= 120
           && incoming().amount is number && incoming().amount > 0
           && incoming().type in ['expense', 'income', 'transfer']
@@ -292,7 +294,7 @@ service cloud.firestore {
           && isValidId(transactionId)
           && incoming().userId == userId
           && incoming().keys().hasAll(['assetId', 'type', 'date', 'quantity', 'price', 'totalAmount', 'userId', 'createdAt'])
-          && incoming().keys().hasOnly(['assetId', 'type', 'date', 'quantity', 'price', 'totalAmount', 'notes', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['assetId', 'type', 'date', 'quantity', 'price', 'totalAmount', 'notes', 'userId', 'createdAt', 'revision', 'updatedAt'])
           && incoming().assetId is string && incoming().assetId.size() <= 128
           && incoming().type in ['buy', 'sell', 'dividend']
           && incoming().date is string && incoming().date.size() == 10 && incoming().date.matches('^\\d{4}-\\d{2}-\\d{2}$')
@@ -310,7 +312,7 @@ service cloud.firestore {
           && incoming().userId == userId
           && incoming().userId == existing().userId
           && incoming().createdAt == existing().createdAt
-          && incoming().keys().hasOnly(['assetId', 'type', 'date', 'quantity', 'price', 'totalAmount', 'notes', 'userId', 'createdAt'])
+          && incoming().keys().hasOnly(['assetId', 'type', 'date', 'quantity', 'price', 'totalAmount', 'notes', 'userId', 'createdAt', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])
           && incoming().assetId is string && incoming().assetId.size() <= 128
           && incoming().type in ['buy', 'sell', 'dividend']
           && incoming().date is string && incoming().date.size() == 10 && incoming().date.matches('^\\d{4}-\\d{2}-\\d{2}$')

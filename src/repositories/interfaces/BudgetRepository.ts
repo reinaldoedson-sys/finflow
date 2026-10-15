@@ -10,10 +10,10 @@ export interface BudgetRepository extends BaseRepository<Budget> {
   /**
    * Retorna os orçamentos de um determinado mês (formato YYYY-MM).
    */
-  getByMonth(month: string): Promise<Budget[]>;
+  getByMonth(month: string, includeDeleted?: boolean): Promise<Budget[]>;
 
   /**
    * Retorna o orçamento específico de uma categoria para um determinado mês.
    */
-  getByCategoryAndMonth(categoryId: string, month: string): Promise<Budget | null>;
+  getByCategoryAndMonth(categoryId: string, month: string, includeDeleted?: boolean): Promise<Budget | null>;
 }

@@ -11,9 +11,7 @@ import {
   Trash2, 
   Wallet, 
   LineChart, 
-  Coins, 
-  Calendar,
-  AlertCircle
+  Coins
 } from 'lucide-react';
 
 interface AccountsViewProps {

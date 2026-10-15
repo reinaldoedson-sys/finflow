@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { SecuritySettings } from '../types/finance';
-import { hashString } from '../utils/crypto';
+import { hashPin, verifyAndMigratePin, isLockedOut, recordFailedAttempt } from '../utils/crypto';
 
 interface SecurityContextType {
   isLocked: boolean;
@@ -14,6 +14,8 @@ interface SecurityContextType {
   toggleHideValues: () => void;
   setAutoLockMinutes: (mins: number) => void;
   hasPinConfigured: boolean;
+  lockedUntil?: number;
+  failedAttempts?: number;
 }
 
 const STORAGE_KEY = 'finflow_security_v1';
@@ -106,35 +108,68 @@ export const SecurityProvider: React.FC<{ children: ReactNode }> = ({ children }
       setIsLocked(false);
       return true;
     }
-    const hash = await hashString(pin);
-    if (hash === settings.pinHash) {
+
+    if (isLockedOut(settings.lockedUntil)) {
+      return false;
+    }
+
+    const result = await verifyAndMigratePin(pin, settings.pinHash);
+    if (result.isValid) {
+      setSettings(prev => ({
+        ...prev,
+        pinHash: result.migratedHash ?? prev.pinHash,
+        failedAttempts: 0,
+        lockedUntil: undefined,
+      }));
       setIsLocked(false);
       return true;
+    } else {
+      const lockout = recordFailedAttempt(settings.failedAttempts || 0);
+      setSettings(prev => ({
+        ...prev,
+        failedAttempts: lockout.failedAttempts,
+        lockedUntil: lockout.lockedUntil,
+      }));
+      return false;
     }
-    return false;
   };
 
   const setPin = async (pin: string) => {
-    const hash = await hashString(pin);
+    const hash = await hashPin(pin);
     setSettings(prev => ({
       ...prev,
       isPinEnabled: true,
       pinHash: hash,
+      failedAttempts: 0,
+      lockedUntil: undefined,
     }));
     setIsLocked(false);
   };
 
   const removePin = async (currentPin: string): Promise<boolean> => {
+    if (isLockedOut(settings.lockedUntil)) {
+      return false;
+    }
+
     if (settings.pinHash) {
-      const hash = await hashString(currentPin);
-      if (hash !== settings.pinHash) {
+      const result = await verifyAndMigratePin(currentPin, settings.pinHash);
+      if (!result.isValid) {
+        const lockout = recordFailedAttempt(settings.failedAttempts || 0);
+        setSettings(prev => ({
+          ...prev,
+          failedAttempts: lockout.failedAttempts,
+          lockedUntil: lockout.lockedUntil,
+        }));
         return false;
       }
     }
+
     setSettings(prev => ({
       ...prev,
       isPinEnabled: false,
       pinHash: undefined,
+      failedAttempts: 0,
+      lockedUntil: undefined,
     }));
     setIsLocked(false);
     return true;
@@ -162,6 +197,8 @@ export const SecurityProvider: React.FC<{ children: ReactNode }> = ({ children }
         toggleHideValues,
         setAutoLockMinutes,
         hasPinConfigured: !!settings.pinHash,
+        lockedUntil: settings.lockedUntil,
+        failedAttempts: settings.failedAttempts,
       }}
     >
       {children}

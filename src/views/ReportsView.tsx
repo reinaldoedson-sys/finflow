@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { formatCurrency, getMonthLabel, getPreviousMonth } from '../utils/currency';
-import { PieChart, BarChart3, TrendingUp, AlertCircle, ArrowUpRight, ArrowDownRight, Award } from 'lucide-react';
+import { PieChart, BarChart3, TrendingUp, Award } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
 
 export const ReportsView: React.FC = () => {

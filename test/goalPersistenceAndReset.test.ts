@@ -3,23 +3,15 @@ import path from 'path';
 import { calculateGoalBalance, resolveGoalInitialAmount } from '../src/domain/calculations';
 import { FinancialGoal, GoalMovement } from '../src/types/finance';
 import {
-  isSampleDataDocument,
   filterOutSampleData,
   mergeCloudWithPending,
   PendingSyncOperation,
-  ALL_SYNC_SUBCOLLECTIONS,
   SyncCollection
 } from '../src/domain/sync';
 import {
   INITIAL_ACCOUNTS,
-  INITIAL_CREDIT_CARDS,
-  INITIAL_BUDGETS,
   INITIAL_GOALS,
-  INITIAL_GOAL_MOVEMENTS,
-  INITIAL_INSTALLMENT_PLANS,
-  INITIAL_TRANSACTIONS,
-  INITIAL_INVESTMENTS,
-  INITIAL_INVESTMENT_TRANSACTIONS
+  INITIAL_INVESTMENTS
 } from '../src/utils/mockData';
 
 let passed = 0;
@@ -301,7 +293,7 @@ console.log('\n[2. Auditoria e Resiliência de clearAllData()]');
     }
     // Se não falhasse, limparia dados locais
     localDataPreserved = false;
-  } catch (err) {
+  } catch {
     detectedError = true;
   }
 
@@ -460,7 +452,7 @@ console.log('\n[5. Proteção Contra Documentos Antigos Reaparecendo]');
   // Testa mergeCloudWithPending quando o Firestore retorna vazio após clearAllData
   const cloudEmpty: { id: string }[] = [];
   const pendingQueueEmpty: PendingSyncOperation[] = [];
-  const localItems = [{ id: 'old-item-1' }];
+  const localItems: { id: string }[] = [];
 
   const mergedAfterClear = mergeCloudWithPending(cloudEmpty, pendingQueueEmpty, 'transactions', localItems);
   assert(mergedAfterClear.length === 0, 'mergeCloudWithPending retorna vazio quando servidor e fila estão vazios');

@@ -11,14 +11,9 @@ import {
   Trash2, 
   Edit3, 
   Copy, 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  ArrowLeftRight,
-  CheckCircle,
-  Clock,
-  Check,
-  Calendar,
-  Layers,
+  Clock, 
+  Check, 
+  Layers, 
   Sparkles
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
@@ -43,8 +38,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     addTransaction,
     selectedMonth,
     loadHistoricalTransactions,
-    historicalPagination,
-    isCloudSynced
+    historicalPagination
   } = useFinance();
   const { hideValues } = useSecurity();
 
@@ -121,7 +115,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   }, [filteredTransactions]);
 
   const handleDuplicate = (tx: Transaction) => {
-    const { id, createdAt, ...rest } = tx;
+    const { id: _id, createdAt: _createdAt, ...rest } = tx;
     addTransaction({
       ...rest,
       description: `${tx.description} (Cópia)`,

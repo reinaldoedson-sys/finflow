@@ -20,12 +20,14 @@ export type SyncCollection =
 
 export type SyncOperationType = 'set' | 'update' | 'delete';
 
+export type SyncPayload = Record<string, unknown> | object;
+
 export interface PendingSyncOperation {
   id: string; // Identificador único estável da operação: `${collection}_${docId}`
   collection: SyncCollection;
   docId: string;
   type: SyncOperationType;
-  payload?: any;
+  payload?: SyncPayload;
   timestamp: string;
   retries: number;
   lastError?: string;
@@ -107,7 +109,7 @@ export function enqueueOperation(
     collection: SyncCollection;
     docId: string;
     type: SyncOperationType;
-    payload?: any;
+    payload?: SyncPayload;
     lastError?: string;
   }
 ): PendingSyncOperation[] {
@@ -196,55 +198,87 @@ export function dequeueOperation(
  * 2. Documentos com criação pendente local ('set') não desapareçam quando o Firestore responder com a lista do servidor.
  * 3. Documentos com 'update' pendente local mantenham as edições locais mais recentes.
  */
+interface SyncableRecord {
+  id: string;
+  deleted?: boolean;
+  currentPrice?: number;
+  previousClose?: number;
+  changePercent?: number;
+  lastPriceUpdate?: string;
+  [key: string]: unknown;
+}
+
 export function mergeCloudWithPending<T extends { id: string }>(
   cloudItems: T[],
   pendingQueue: PendingSyncOperation[],
   collection: SyncCollection,
-  localItems: T[]
+  localItems: T[] = []
 ): T[] {
-  const relevantOps = pendingQueue.filter(op => op.collection === collection);
-  if (relevantOps.length === 0) {
-    return cloudItems;
-  }
+  const relevantOps = (pendingQueue || []).filter(op => op.collection === collection);
 
   const deleteIds = new Set(
     relevantOps.filter(op => op.type === 'delete').map(op => op.docId)
   );
 
-  const updatesMap = new Map<string, any>(
+  const updatesMap = new Map<string, SyncPayload | undefined>(
     relevantOps.filter(op => op.type === 'update').map(op => [op.docId, op.payload])
   );
 
-  const setIds = new Set(
-    relevantOps.filter(op => op.type === 'set').map(op => op.docId)
-  );
-
-  // 1. Filtra itens que foram excluídos localmente
   const result: T[] = [];
   const seenIds = new Set<string>();
+  const localItemsMap = new Map<string, T>(
+    (localItems || []).map(item => [item.id, item])
+  );
 
-  for (const item of cloudItems) {
-    if (deleteIds.has(item.id)) {
+  // 1. Processa itens da nuvem (ignorando itens deletados localmente ou marcados com tombstone)
+  for (const item of (cloudItems || [])) {
+    const cloudRecord = item as unknown as SyncableRecord;
+    if (deleteIds.has(item.id) || Boolean(cloudRecord.deleted)) {
       continue;
     }
     const updatePayload = updatesMap.get(item.id);
-    if (updatePayload) {
-      result.push({ ...item, ...updatePayload });
-    } else {
-      result.push(item);
+    let mergedItem = updatePayload ? { ...item, ...updatePayload } : { ...item };
+
+    // Para investimentos: se o item local contiver cotação de mercado mais recente, preserva a cotação
+    // Evita que snapshots remotos com preço de compra original sobrescrevam a cotação ao navegar entre telas
+    if (collection === 'investments') {
+      const localMatch = localItemsMap.get(item.id) as unknown as SyncableRecord | undefined;
+      if (localMatch && typeof localMatch.currentPrice === 'number') {
+        const localTime = localMatch.lastPriceUpdate ? new Date(localMatch.lastPriceUpdate).getTime() : 0;
+        const mergedRecord = mergedItem as unknown as SyncableRecord;
+        const remoteTime = mergedRecord.lastPriceUpdate ? new Date(mergedRecord.lastPriceUpdate).getTime() : 0;
+        if (localTime >= remoteTime || !remoteTime) {
+          mergedItem = {
+            ...mergedItem,
+            currentPrice: localMatch.currentPrice,
+            previousClose: (localMatch.previousClose ?? mergedRecord.previousClose) as typeof mergedItem[keyof typeof mergedItem],
+            changePercent: (localMatch.changePercent ?? mergedRecord.changePercent) as typeof mergedItem[keyof typeof mergedItem],
+            lastPriceUpdate: (localMatch.lastPriceUpdate || mergedRecord.lastPriceUpdate) as typeof mergedItem[keyof typeof mergedItem],
+          };
+        }
+      }
     }
+
+    result.push(mergedItem);
     seenIds.add(item.id);
   }
 
-  // 2. Preserva criações pendentes que ainda não existem na nuvem
-  for (const localItem of localItems) {
-    if (setIds.has(localItem.id) && !seenIds.has(localItem.id) && !deleteIds.has(localItem.id)) {
-      result.push(localItem);
+  // 2. Preserva criações e registros locais válidos que ainda não constam na nuvem
+  // Garante Local-First absoluto: entidades locais não são descartadas por snapshots remotos incompletos
+  for (const localItem of (localItems || [])) {
+    const localRecord = localItem as unknown as SyncableRecord;
+    if (!deleteIds.has(localItem.id) && !localRecord.deleted && !seenIds.has(localItem.id)) {
+      const updatePayload = updatesMap.get(localItem.id);
+      if (updatePayload) {
+        result.push({ ...localItem, ...updatePayload });
+      } else {
+        result.push(localItem);
+      }
       seenIds.add(localItem.id);
     }
   }
 
-  // 2b. Se houver operações 'set' com payload na fila que ainda não constavam no array local
+  // 3. Se houver operações 'set' com payload na fila que ainda não constavam no array local nem na nuvem
   for (const op of relevantOps) {
     if (op.type === 'set' && op.payload && !seenIds.has(op.docId) && !deleteIds.has(op.docId)) {
       result.push({ id: op.docId, ...op.payload } as T);

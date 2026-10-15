@@ -1,14 +1,11 @@
 import assert from 'node:assert';
 import { InvestmentAsset, InvestmentTransaction } from '../src/types/finance';
 import {
-  calculateInvestmentPosition,
-  calculateAllInvestmentPositions,
   resolveEffectiveInvestmentPosition,
   resolveAllEffectiveInvestments,
   calculateEffectiveInvestmentValue,
   compareAssetWithLedger
 } from '../src/domain/investmentPosition';
-import { calculateInvestmentCost, calculateInvestmentValue } from '../src/domain/investments';
 
 console.log('--- INICIANDO TESTES DE INTEGRAÇÃO DO INVESTMENT LEDGER (ETAPA 10.2) ---');
 

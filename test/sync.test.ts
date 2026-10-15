@@ -43,7 +43,7 @@ function createMockTx(id: string, description: string, amount: number): Transact
 // =========================================================================
 {
   let queue: PendingSyncOperation[] = [];
-  let status: SyncStatus = 'synced';
+  let status: SyncStatus;
   const localTransactions: Transaction[] = [];
 
   // Simula criação local
@@ -151,7 +151,7 @@ function createMockTx(id: string, description: string, amount: number): Transact
 // =========================================================================
 {
   let queue: PendingSyncOperation[] = [];
-  let status: SyncStatus = 'synced';
+  let status: SyncStatus;
 
   const tx1 = createMockTx('tx-1', 'Almoço', 45);
   const tx2 = createMockTx('tx-2', 'Jantar', 60);
@@ -219,6 +219,86 @@ function createMockTx(id: string, description: string, amount: number): Transact
   // Novo snapshot chega do Firestore (onde tx-cloud-old ainda existe): a exclusão local deve ser honrada
   const mergedAfterDelete = mergeCloudWithPending(cloudSnapshot, queue, 'transactions', localTransactions);
   assert(!mergedAfterDelete.some(t => t.id === 'tx-cloud-old'), 'Teste E: Item com exclusão pendente não ressuscita com snapshot do servidor');
+}
+
+// =========================================================================
+// TESTE F: Criação de conta local preservada no refresh mesmo com fila vazia ou snapshot atrasado
+// =========================================================================
+{
+  const localAccounts = [
+    { id: 'acc-1', name: 'Conta Principal', bankName: 'Nubank', type: 'checking', color: '#820ad1', initialBalance: 100, currentBalance: 100, icon: 'Building2' } as any,
+    { id: 'acc-new', name: 'Nova Conta Poupanca', bankName: 'Itau', type: 'savings', color: '#ff6600', initialBalance: 500, currentBalance: 500, icon: 'Building2' } as any
+  ];
+
+  // Fila já foi processada ou vazia no momento do refresh
+  const emptyQueue: PendingSyncOperation[] = [];
+
+  // Snapshot remoto do Firestore que ainda não tem a nova conta
+  const cloudSnapshot = [
+    { id: 'acc-1', name: 'Conta Principal', bankName: 'Nubank', type: 'checking', color: '#820ad1', initialBalance: 100, currentBalance: 100, icon: 'Building2' } as any
+  ];
+
+  const merged = mergeCloudWithPending(cloudSnapshot, emptyQueue, 'accounts', localAccounts);
+
+  assert(merged.length === 2, `Teste F: Nova conta não desaparece no refresh com snapshot atrasado (total: ${merged.length})`);
+  assert(merged.some(a => a.id === 'acc-new'), 'Teste F: "acc-new" permanece visível e estável');
+  assert(merged.some(a => a.id === 'acc-1'), 'Teste F: "acc-1" permanece íntegra');
+
+  // Teste de tombstone no snapshot remoto: itens com deleted: true não devem aparecer na UI
+  const cloudWithDeleted = [
+    ...cloudSnapshot,
+    { id: 'acc-deleted', name: 'Conta Encerrada', deleted: true, tombstoneRevision: 2 } as any
+  ];
+  const mergedNoTombstone = mergeCloudWithPending(cloudWithDeleted, emptyQueue, 'accounts', localAccounts);
+  assert(!mergedNoTombstone.some(a => a.id === 'acc-deleted'), 'Teste F: Conta com tombstone (deleted: true) no cloudSnapshot é filtrada da UI');
+}
+
+// =========================================================================
+// TESTE G: Preservação de cotações atualizadas em investimentos ao mudar de tela ou receber snapshot remoto
+// =========================================================================
+{
+  // Usuário comprou ativo a R$ 35,00
+  // Atualizou cotação no dia para R$ 42,50 com timestamp recente
+  const localInvestments = [
+    {
+      id: 'inv-petr4',
+      ticker: 'PETR4',
+      name: 'Petrobras PN',
+      type: 'stock',
+      quantity: 100,
+      averagePrice: 35.0,
+      currentPrice: 42.5,
+      previousClose: 41.0,
+      changePercent: 3.65,
+      lastPriceUpdate: '2026-10-10T14:30:00.000Z',
+      currency: 'BRL',
+      autoUpdate: true,
+      createdAt: '2026-10-01T10:00:00.000Z'
+    } as any
+  ];
+
+  // Snapshot remoto do Firestore que ainda tem o preço original de compra (R$ 35,00) sem lastPriceUpdate
+  const cloudSnapshot = [
+    {
+      id: 'inv-petr4',
+      ticker: 'PETR4',
+      name: 'Petrobras PN',
+      type: 'stock',
+      quantity: 100,
+      averagePrice: 35.0,
+      currentPrice: 35.0,
+      currency: 'BRL',
+      autoUpdate: true,
+      createdAt: '2026-10-01T10:00:00.000Z'
+    } as any
+  ];
+
+  const merged = mergeCloudWithPending(cloudSnapshot, [], 'investments', localInvestments);
+
+  assert(merged.length === 1, 'Teste G: Ativo preservado');
+  assert(merged[0].currentPrice === 42.5, `Teste G: Cotação atualizada (R$ 42,50) foi preservada e não reverteu para o preço de compra (R$ ${merged[0].currentPrice})`);
+  assert(merged[0].previousClose === 41.0, 'Teste G: previousClose preservado');
+  assert(merged[0].changePercent === 3.65, 'Teste G: changePercent preservado');
 }
 
 console.log(`\nResultado Final dos Testes de Consistência: ${passed} passaram, ${failed} falharam.`);

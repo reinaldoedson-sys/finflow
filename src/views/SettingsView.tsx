@@ -4,29 +4,22 @@ import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
 import { CurrencyCode } from '../types/finance';
 import { 
-  Shield, 
   Lock, 
-  Key, 
   Eye, 
   Clock, 
   Download, 
-  Upload, 
   RefreshCw, 
   Trash2, 
   Plus, 
-  Check, 
-  AlertTriangle,
-  FolderLock,
-  Cloud,
-  LogIn,
-  LogOut,
-  CheckCircle2,
-  Smartphone,
-  Sparkles,
-  ExternalLink,
-  Share2
+  FolderLock, 
+  Cloud, 
+  LogIn, 
+  LogOut, 
+  CheckCircle2, 
+  Smartphone, 
+  Sparkles, 
+  ExternalLink
 } from 'lucide-react';
-import { CategoryIcon } from '../components/CategoryIcon';
 
 interface SettingsViewProps {
   onOpenBackupModal: () => void;
@@ -52,9 +45,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
     resetToDefaults, 
     clearAllData,
     clearSampleData,
-    isDemoActive,
     syncLocalToCloud,
-    isCloudSynced,
     syncStatus: globalSyncStatus,
     syncError,
     pendingSyncCount,

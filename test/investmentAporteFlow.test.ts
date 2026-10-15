@@ -4,8 +4,7 @@ import {
   validateAporteParams,
   prepareAportePlan,
   checkAporteIdempotency,
-  ExecuteAporteParams,
-  PreparedAportePlan
+  ExecuteAporteParams
 } from '../src/domain/investmentAporte';
 import { calculateAportePosition } from '../src/domain/investments';
 import { calculateTransactionTotal } from '../src/domain/investmentTransactions';
@@ -184,7 +183,7 @@ function createMockAporteEngine(initialOverrides?: Partial<MockContextState>) {
       state.investments = prevInvestments;
       state.investmentTransactions = prevInvestmentTxs;
       state.transactions = prevTransactions;
-      throw new Error(`Falha ao registrar aporte localmente: ${localErr instanceof Error ? localErr.message : String(localErr)}`);
+      throw new Error(`Falha ao registrar aporte localmente: ${localErr instanceof Error ? localErr.message : String(localErr)}`, { cause: localErr });
     }
 
     // 5. Persistência atômica no Firestore / Cloud Sync

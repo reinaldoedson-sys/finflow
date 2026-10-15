@@ -18,7 +18,13 @@ import type {
   InvestmentRepository,
   GoalRepository,
   BudgetRepository,
+  CategoryRepository,
+  InstallmentPlanRepository,
 } from '../repositories/interfaces';
+import {
+  IndexedDBCategoryRepository,
+  IndexedDBInstallmentPlanRepository,
+} from '../repositories/implementations';
 import type {
   Transaction,
   Account,
@@ -28,7 +34,61 @@ import type {
   FinancialGoal,
   GoalMovement,
   Budget,
+  Category,
+  InstallmentPlan,
 } from '../types/finance';
+
+type DomainEntity =
+  | Transaction
+  | Account
+  | CreditCard
+  | InvestmentAsset
+  | InvestmentTransaction
+  | FinancialGoal
+  | GoalMovement
+  | Budget
+  | Category
+  | InstallmentPlan;
+
+// =========================================================================
+// Type Guards Reutilizáveis (Regra 2)
+// =========================================================================
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number' && !Number.isNaN(value);
+}
+
+function getDeletedAt(item: unknown): string | undefined {
+  if (isRecord(item) && isString(item.deletedAt)) {
+    return item.deletedAt;
+  }
+  return undefined;
+}
+
+function getTombstoneRevision(item: unknown): number | undefined {
+  if (isRecord(item) && isNumber(item.tombstoneRevision)) {
+    return item.tombstoneRevision;
+  }
+  return undefined;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (isRecord(error) && isString(error.message)) {
+    return error.message;
+  }
+  return 'Erro inesperado';
+}
 
 export interface FinancialRepositories {
   transactions: TransactionRepository;
@@ -37,6 +97,8 @@ export interface FinancialRepositories {
   investments: InvestmentRepository;
   goals: GoalRepository;
   budgets: BudgetRepository;
+  categories?: CategoryRepository;
+  installmentPlans?: InstallmentPlanRepository;
 }
 
 export interface SaveOptions {
@@ -68,6 +130,8 @@ export class FinancialSyncService {
   private listeners = new Set<SyncEventListener>();
 
   private repos: FinancialRepositories;
+  private categoryRepo: CategoryRepository;
+  private installmentPlanRepo: InstallmentPlanRepository;
   private queue: SyncQueue;
   private conflictResolver: ConflictResolver;
   private cloud: CloudSyncProvider;
@@ -80,6 +144,9 @@ export class FinancialSyncService {
     this.cloud = config.cloudProvider;
     this.database = config.database || db;
     this.autoProcess = config.autoProcessQueue ?? false;
+
+    this.categoryRepo = config.repositories.categories || new IndexedDBCategoryRepository(this.database);
+    this.installmentPlanRepo = config.repositories.installmentPlans || new IndexedDBInstallmentPlanRepository(this.database);
 
     // Detecta status de conexão nativo do browser sem React
     if (typeof window !== 'undefined' && typeof window.navigator !== 'undefined') {
@@ -181,7 +248,7 @@ export class FinancialSyncService {
       entityId: transaction.id,
       action: 'create',
       payload: transaction,
-      revision: (transaction as any).revision || 1,
+      revision: transaction.revision || 1,
       dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
     });
 
@@ -193,8 +260,8 @@ export class FinancialSyncService {
     const operationId = opId || `op_tx_del_${id}_${Date.now()}`;
     const now = new Date().toISOString();
 
-    const existing = await this.repos.transactions.getById(id);
-    const tombstoneRevision = ((existing as any)?.tombstoneRevision || 1) + 1;
+    const existing = await this.repos.transactions.getById(id, true);
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
 
     const tombstone: TombstoneMetadata = {
       deleted: true,
@@ -209,14 +276,15 @@ export class FinancialSyncService {
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      });
     } else {
+      // Cast pontual (Regra 3): registro tombstone mínimo para entidade ausente no banco local
       await this.repos.transactions.save({
         id,
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      } as Transaction);
     }
 
     // Enfileira com soft delete / tombstone
@@ -261,7 +329,7 @@ export class FinancialSyncService {
       entityId: account.id,
       action: 'create',
       payload: account,
-      revision: (account as any).revision || 1,
+      revision: account.revision || 1,
       dependsOn: options.dependsOn,
     });
 
@@ -274,7 +342,7 @@ export class FinancialSyncService {
     const now = new Date().toISOString();
 
     const existing = await this.repos.accounts.getById(id, true);
-    const tombstoneRevision = ((existing as any)?.tombstoneRevision || 1) + 1;
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
 
     const tombstone: TombstoneMetadata = {
       deleted: true,
@@ -290,14 +358,15 @@ export class FinancialSyncService {
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      });
     } else {
+      // Cast pontual (Regra 3): registro tombstone mínimo para conta ausente no banco local
       await this.repos.accounts.save({
         id,
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      } as Account);
     }
 
     // Enfileira com soft delete / tombstone
@@ -341,7 +410,7 @@ export class FinancialSyncService {
     // Separar claramente campos sincronizados vs derivados:
     // Sincronizados: name, bankName, limit, closingDay, dueDay, color, brand, etc.
     // Derivados: currentInvoice NUNCA entra na SyncQueue nem é transmitido como fonte da verdade!
-    const { currentInvoice, ...syncPayload } = card;
+    const { currentInvoice: _currentInvoice, ...syncPayload } = card;
 
     await this.queue.enqueue({
       operationId,
@@ -351,7 +420,7 @@ export class FinancialSyncService {
       entityId: card.id,
       action: 'create',
       payload: syncPayload,
-      revision: (card as any).revision || 1,
+      revision: card.revision || 1,
       dependsOn: options.dependsOn,
     });
 
@@ -364,7 +433,7 @@ export class FinancialSyncService {
     const now = new Date().toISOString();
 
     const existing = await this.repos.creditCards.getById(id, true);
-    const tombstoneRevision = ((existing as any)?.tombstoneRevision || 1) + 1;
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
 
     const tombstone: TombstoneMetadata = {
       deleted: true,
@@ -380,14 +449,15 @@ export class FinancialSyncService {
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      });
     } else {
+      // Cast pontual (Regra 3): registro tombstone mínimo para cartão ausente no banco local
       await this.repos.creditCards.save({
         id,
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      } as CreditCard);
     }
 
     // Enfileira com soft delete / tombstone
@@ -430,15 +500,15 @@ export class FinancialSyncService {
     let conflictsResolved = 0;
     let tombstonesRespected = 0;
 
-    const itemsToSave: any[] = [];
+    const itemsToSave: VersionedEntity[] = [];
 
     for (const remoteItem of remoteItems) {
-      let localItem: any = null;
+      let localItem: DomainEntity | null = null;
 
       // Consulta estado local com suporte a tombstone
       switch (entityName) {
         case 'transactions':
-          localItem = await this.repos.transactions.getById(remoteItem.id);
+          localItem = await this.repos.transactions.getById(remoteItem.id, true);
           break;
         case 'accounts':
           localItem = await this.repos.accounts.getById(remoteItem.id, true);
@@ -453,18 +523,29 @@ export class FinancialSyncService {
           localItem = await this.repos.investments.getTransactionById(remoteItem.id, true);
           break;
         case 'goals':
-          localItem = await this.repos.goals.getGoalById(remoteItem.id);
+          localItem = await this.repos.goals.getGoalById(remoteItem.id, true);
           break;
         case 'goalMovements':
-          localItem = await this.repos.goals.getMovementById(remoteItem.id);
+          localItem = await this.repos.goals.getMovementById(remoteItem.id, true);
           break;
         case 'budgets':
-          localItem = await this.repos.budgets.getById(remoteItem.id);
+          localItem = await this.repos.budgets.getById(remoteItem.id, true);
+          break;
+        case 'categories':
+          localItem = await (this.repos.categories || this.categoryRepo).getById(remoteItem.id, true);
+          break;
+        case 'installmentPlans':
+          localItem = await (this.repos.installmentPlans || this.installmentPlanRepo).getById(remoteItem.id, true);
           break;
       }
 
       // Aplica ConflictResolver
-      const resolution = this.conflictResolver.resolve(entityName, localItem, remoteItem);
+      // Cast pontual (Regra 3): entidade local tipada adaptada para resolução com T genérico
+      const resolution = this.conflictResolver.resolve(
+        entityName,
+        localItem as (T & DomainEntity) | null,
+        remoteItem
+      );
 
       if (resolution.divergenceDetected) {
         conflictsResolved++;
@@ -472,16 +553,21 @@ export class FinancialSyncService {
 
       if (resolution.action === 'mark_deleted') {
         tombstonesRespected++;
-        const tombstoneItem = {
+        const localDeletedAt = getDeletedAt(localItem);
+        const remoteDeletedAt = getDeletedAt(remoteItem);
+        const localTombstoneRev = getTombstoneRevision(localItem);
+        const remoteTombstoneRev = getTombstoneRevision(remoteItem);
+
+        const tombstoneItem: VersionedEntity = {
           ...(localItem || remoteItem),
           deleted: true,
           deletedAt:
-            (localItem as any)?.deletedAt ||
-            (remoteItem as any)?.deletedAt ||
+            localDeletedAt ||
+            remoteDeletedAt ||
             new Date().toISOString(),
           tombstoneRevision: Math.max(
-            (localItem as any)?.tombstoneRevision || 1,
-            (remoteItem as any)?.tombstoneRevision || 1
+            localTombstoneRev || 1,
+            remoteTombstoneRev || 1
           ),
         };
         itemsToSave.push(tombstoneItem);
@@ -496,46 +582,64 @@ export class FinancialSyncService {
       const applyPersist = async () => {
         switch (entityName) {
           case 'transactions':
-            await this.repos.transactions.saveBatch(itemsToSave);
+            // Cast pontual (Regra 3): lote tipado de transações para persistência a partir dos itens versionados recebidos da nuvem
+            await this.repos.transactions.saveBatch(itemsToSave as Transaction[]);
             break;
           case 'accounts':
-            await this.repos.accounts.saveBatch(itemsToSave);
+            // Cast pontual (Regra 3): lote tipado de contas para persistência a partir dos itens versionados recebidos da nuvem
+            await this.repos.accounts.saveBatch(itemsToSave as Account[]);
             break;
           case 'creditCards':
-            await this.repos.creditCards.saveBatch(itemsToSave);
+            // Cast pontual (Regra 3): lote tipado de cartões para persistência a partir dos itens versionados recebidos da nuvem
+            await this.repos.creditCards.saveBatch(itemsToSave as CreditCard[]);
             break;
           case 'investments':
-            await this.repos.investments.saveAssetsBatch(itemsToSave);
+            // Cast pontual (Regra 3): lote tipado de ativos para persistência a partir dos itens versionados recebidos da nuvem
+            await this.repos.investments.saveAssetsBatch(itemsToSave as InvestmentAsset[]);
             break;
           case 'investmentTransactions':
-            await this.repos.investments.saveTransactionsBatch(itemsToSave);
+            // Cast pontual (Regra 3): lote tipado de transações de investimentos para persistência a partir dos itens versionados recebidos da nuvem
+            await this.repos.investments.saveTransactionsBatch(itemsToSave as InvestmentTransaction[]);
             break;
           case 'goals':
-            await this.repos.goals.saveGoalsBatch(itemsToSave);
+            // Cast pontual (Regra 3): lote tipado de metas para persistência a partir dos itens versionados recebidos da nuvem
+            await this.repos.goals.saveGoalsBatch(itemsToSave as FinancialGoal[]);
             break;
           case 'goalMovements':
-            await this.repos.goals.saveMovementsBatch(itemsToSave);
+            // Cast pontual (Regra 3): lote tipado de movimentações de metas para persistência a partir dos itens versionados recebidos da nuvem
+            await this.repos.goals.saveMovementsBatch(itemsToSave as GoalMovement[]);
             break;
           case 'budgets':
-            await this.repos.budgets.saveBatch(itemsToSave);
+            // Cast pontual (Regra 3): lote tipado de orçamentos para persistência a partir dos itens versionados recebidos da nuvem
+            await this.repos.budgets.saveBatch(itemsToSave as Budget[]);
+            break;
+          case 'categories':
+            // Cast pontual (Regra 3): lote tipado de categorias para persistência a partir dos itens versionados recebidos da nuvem
+            await (this.repos.categories || this.categoryRepo).saveBatch(itemsToSave as Category[]);
+            break;
+          case 'installmentPlans':
+            // Cast pontual (Regra 3): lote tipado de parcelamentos para persistência a partir dos itens versionados recebidos da nuvem
+            await (this.repos.installmentPlans || this.installmentPlanRepo).saveBatch(itemsToSave as InstallmentPlan[]);
             break;
         }
       };
 
       // Usa transação Dexie se a database disponibilizar o método transaction
-      if (this.database && typeof (this.database as any).transaction === 'function') {
+      if (this.database && typeof this.database.transaction === 'function') {
         try {
-          await (this.database as any).transaction(
+          await this.database.transaction(
             'rw',
             [
-              (this.database as any).transactions,
-              (this.database as any).accounts,
-              (this.database as any).creditCards,
-              (this.database as any).investments,
-              (this.database as any).investmentTransactions,
-              (this.database as any).goals,
-              (this.database as any).goalMovements,
-              (this.database as any).budgets,
+              this.database.transactions,
+              this.database.accounts,
+              this.database.creditCards,
+              this.database.investments,
+              this.database.investmentTransactions,
+              this.database.goals,
+              this.database.goalMovements,
+              this.database.budgets,
+              this.database.categories,
+              this.database.installmentPlans,
             ].filter(Boolean),
             applyPersist
           );
@@ -571,7 +675,7 @@ export class FinancialSyncService {
       entityName: SyncEntityName;
       entityId: string;
       action: 'create' | 'update' | 'delete';
-      payload?: any;
+      payload?: unknown;
       dependsOn?: SyncDependency[];
       tombstone?: TombstoneMetadata;
     }[];
@@ -584,15 +688,15 @@ export class FinancialSyncService {
     }
 
     // 1. Persistência local atômica via transação Dexie
-    if (this.database && typeof (this.database as any).transaction === 'function') {
-      await (this.database as any).transaction(
+    if (this.database && typeof this.database.transaction === 'function') {
+      await this.database.transaction(
         'rw',
         [
-          (this.database as any).transactions,
-          (this.database as any).accounts,
-          (this.database as any).creditCards,
-          (this.database as any).investments,
-          (this.database as any).investmentTransactions,
+          this.database.transactions,
+          this.database.accounts,
+          this.database.creditCards,
+          this.database.investments,
+          this.database.investmentTransactions,
         ].filter(Boolean),
         applyLocalPersist
       );
@@ -635,13 +739,19 @@ export class FinancialSyncService {
 
     // Garante que campos derivados (currentValue, profit, profitability, performance)
     // NUNCA sejam persistidos nem transmitidos como fonte da verdade
+    const assetWithDerived = asset as InvestmentAsset & {
+      currentValue?: number;
+      profit?: number;
+      profitability?: number;
+      performance?: number;
+    };
     const {
-      currentValue,
-      profit,
-      profitability,
-      performance,
+      currentValue: _currentValue,
+      profit: _profit,
+      profitability: _profitability,
+      performance: _performance,
       ...cleanAsset
-    } = asset as any;
+    } = assetWithDerived;
 
     await this.repos.investments.saveAsset(cleanAsset);
 
@@ -669,7 +779,7 @@ export class FinancialSyncService {
     const now = new Date().toISOString();
 
     const existing = await this.repos.investments.getAssetById(id, true);
-    const tombstoneRevision = ((existing as any)?.tombstoneRevision || 1) + 1;
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
 
     const tombstone: TombstoneMetadata = {
       deleted: true,
@@ -684,14 +794,15 @@ export class FinancialSyncService {
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      });
     } else {
+      // Cast pontual (Regra 3): registro tombstone mínimo para ativo ausente no banco local
       await this.repos.investments.saveAsset({
         id,
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      } as InvestmentAsset);
     }
 
     await this.queue.enqueue({
@@ -749,7 +860,7 @@ export class FinancialSyncService {
     const now = new Date().toISOString();
 
     const existing = await this.repos.investments.getTransactionById(id, true);
-    const tombstoneRevision = ((existing as any)?.tombstoneRevision || 1) + 1;
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
 
     const tombstone: TombstoneMetadata = {
       deleted: true,
@@ -765,14 +876,15 @@ export class FinancialSyncService {
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      });
     } else {
+      // Cast pontual (Regra 3): registro tombstone mínimo para transação de investimento ausente no banco local
       await this.repos.investments.saveTransaction({
         id,
         deleted: true,
         deletedAt: now,
         tombstoneRevision,
-      } as any);
+      } as InvestmentTransaction);
     }
 
     await this.queue.enqueue({
@@ -862,32 +974,127 @@ export class FinancialSyncService {
   // Escrita Local-First: Metas Financeiras (Metas & Ledger)
   // =========================================================================
 
-  async saveGoal(goal: FinancialGoal, opId?: string): Promise<void> {
-    const operationId = opId || `op_goal_${goal.id}_${Date.now()}`;
+  async saveGoal(goal: FinancialGoal, opIdOrOptions?: string | SaveOptions): Promise<void> {
+    const options: SaveOptions =
+      typeof opIdOrOptions === 'string'
+        ? { operationId: opIdOrOptions }
+        : opIdOrOptions || {};
+
+    const operationId = options.operationId || `op_goal_${goal.id}_${Date.now()}`;
+    const mutationSource = options.mutationSource || 'LOCAL';
+
     await this.repos.goals.saveGoal(goal);
+
+    if (mutationSource === 'REMOTE') {
+      return;
+    }
 
     await this.queue.enqueue({
       operationId,
+      correlationId: options.correlationId,
+      mutationSource,
       entityName: 'goals',
       entityId: goal.id,
       action: 'create',
       payload: goal,
+      revision: goal.revision || 1,
+      dependsOn: options.dependsOn,
     });
 
     this.setStatus('pending');
     this.triggerBackgroundProcessing();
   }
 
-  async saveGoalMovement(movement: GoalMovement, opId?: string): Promise<void> {
-    const operationId = opId || `op_gmov_${movement.id}_${Date.now()}`;
+  async deleteGoal(id: string, opId?: string): Promise<void> {
+    const operationId = opId || `op_goal_del_${id}_${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const existing = await this.repos.goals.getGoalById(id, true);
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
+
+    const tombstone: TombstoneMetadata = {
+      deleted: true,
+      deletedAt: now,
+      tombstoneRevision,
+    };
+
+    // Soft delete / tombstone atômico no repositório local
+    await this.repos.goals.deleteGoal(id);
+
+    // Enfileira exclusão com soft delete / tombstone
+    await this.queue.enqueue({
+      operationId,
+      entityName: 'goals',
+      entityId: id,
+      action: 'delete',
+      tombstone,
+      revision: tombstoneRevision,
+    });
+
+    this.setStatus('pending');
+    this.triggerBackgroundProcessing();
+  }
+
+  async saveGoalMovement(movement: GoalMovement, opIdOrOptions?: string | SaveOptions): Promise<void> {
+    const options: SaveOptions =
+      typeof opIdOrOptions === 'string'
+        ? { operationId: opIdOrOptions }
+        : opIdOrOptions || {};
+
+    const operationId = options.operationId || `op_gmov_${movement.id}_${Date.now()}`;
+    const mutationSource = options.mutationSource || 'LOCAL';
+
     await this.repos.goals.saveMovement(movement);
+
+    if (mutationSource === 'REMOTE') {
+      return;
+    }
+
+    const dependsOn: SyncDependency[] = options.dependsOn ? [...options.dependsOn] : [];
+    if (!options.dependsOn && movement.goalId) {
+      dependsOn.push({ entityName: 'goals', entityId: movement.goalId });
+    }
 
     await this.queue.enqueue({
       operationId,
+      correlationId: options.correlationId,
+      mutationSource,
       entityName: 'goalMovements',
       entityId: movement.id,
       action: 'create',
       payload: movement,
+      revision: movement.revision || 1,
+      dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+    });
+
+    this.setStatus('pending');
+    this.triggerBackgroundProcessing();
+  }
+
+  async deleteGoalMovement(id: string, opId?: string): Promise<void> {
+    const operationId = opId || `op_gmov_del_${id}_${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const existing = await this.repos.goals.getMovementById(id, true);
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
+
+    const tombstone: TombstoneMetadata = {
+      deleted: true,
+      deletedAt: now,
+      tombstoneRevision,
+    };
+
+    // Soft delete / tombstone no repositório local
+    await this.repos.goals.deleteMovement(id);
+
+    // Enfileira exclusão com soft delete / tombstone
+    await this.queue.enqueue({
+      operationId,
+      entityName: 'goalMovements',
+      entityId: id,
+      action: 'delete',
+      tombstone,
+      revision: tombstoneRevision,
     });
 
     this.setStatus('pending');
@@ -898,16 +1105,203 @@ export class FinancialSyncService {
   // Escrita Local-First: Orçamentos
   // =========================================================================
 
-  async saveBudget(budget: Budget, opId?: string): Promise<void> {
-    const operationId = opId || `op_bdg_${budget.id}_${Date.now()}`;
+  async saveBudget(budget: Budget, opIdOrOptions?: string | SaveOptions): Promise<void> {
+    const options: SaveOptions =
+      typeof opIdOrOptions === 'string'
+        ? { operationId: opIdOrOptions }
+        : opIdOrOptions || {};
+
+    const operationId = options.operationId || `op_bdg_${budget.id}_${Date.now()}`;
+    const mutationSource = options.mutationSource || 'LOCAL';
+
     await this.repos.budgets.save(budget);
+
+    if (mutationSource === 'REMOTE') {
+      return;
+    }
 
     await this.queue.enqueue({
       operationId,
+      correlationId: options.correlationId,
+      mutationSource,
       entityName: 'budgets',
       entityId: budget.id,
       action: 'create',
       payload: budget,
+      revision: budget.revision || 1,
+      dependsOn: options.dependsOn,
+    });
+
+    this.setStatus('pending');
+    this.triggerBackgroundProcessing();
+  }
+
+  async deleteBudget(id: string, opId?: string): Promise<void> {
+    const operationId = opId || `op_bdg_del_${id}_${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const existing = await this.repos.budgets.getById(id, true);
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
+
+    const tombstone: TombstoneMetadata = {
+      deleted: true,
+      deletedAt: now,
+      tombstoneRevision,
+    };
+
+    // Soft delete / tombstone no repositório local
+    await this.repos.budgets.delete(id);
+
+    // Enfileira exclusão com soft delete / tombstone
+    await this.queue.enqueue({
+      operationId,
+      entityName: 'budgets',
+      entityId: id,
+      action: 'delete',
+      tombstone,
+      revision: tombstoneRevision,
+    });
+
+    this.setStatus('pending');
+    this.triggerBackgroundProcessing();
+  }
+
+  // =========================================================================
+  // Escrita Local-First: Categorias (Fase 2.3)
+  // =========================================================================
+
+  async saveCategory(category: Category, opIdOrOptions?: string | SaveOptions): Promise<void> {
+    const options: SaveOptions =
+      typeof opIdOrOptions === 'string'
+        ? { operationId: opIdOrOptions }
+        : opIdOrOptions || {};
+
+    const operationId = options.operationId || `op_cat_${category.id}_${Date.now()}`;
+    const mutationSource = options.mutationSource || 'LOCAL';
+    const repo = this.repos.categories || this.categoryRepo;
+
+    await repo.save(category);
+
+    if (mutationSource === 'REMOTE') {
+      return;
+    }
+
+    await this.queue.enqueue({
+      operationId,
+      correlationId: options.correlationId,
+      mutationSource,
+      entityName: 'categories',
+      entityId: category.id,
+      action: 'create',
+      payload: category,
+      revision: category.revision || 1,
+      dependsOn: options.dependsOn,
+    });
+
+    this.setStatus('pending');
+    this.triggerBackgroundProcessing();
+  }
+
+  async deleteCategory(id: string, opId?: string): Promise<void> {
+    const operationId = opId || `op_cat_del_${id}_${Date.now()}`;
+    const now = new Date().toISOString();
+    const repo = this.repos.categories || this.categoryRepo;
+
+    const existing = await repo.getById(id, true);
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
+
+    const tombstone: TombstoneMetadata = {
+      deleted: true,
+      deletedAt: now,
+      tombstoneRevision,
+    };
+
+    // Soft delete / tombstone no repositório local
+    await repo.delete(id);
+
+    // Enfileira exclusão com soft delete / tombstone
+    await this.queue.enqueue({
+      operationId,
+      entityName: 'categories',
+      entityId: id,
+      action: 'delete',
+      tombstone,
+      revision: tombstoneRevision,
+    });
+
+    this.setStatus('pending');
+    this.triggerBackgroundProcessing();
+  }
+
+  // =========================================================================
+  // Escrita Local-First: Planos de Parcelamento (Fase 2.3)
+  // =========================================================================
+
+  async saveInstallmentPlan(plan: InstallmentPlan, opIdOrOptions?: string | SaveOptions): Promise<void> {
+    const options: SaveOptions =
+      typeof opIdOrOptions === 'string'
+        ? { operationId: opIdOrOptions }
+        : opIdOrOptions || {};
+
+    const operationId = options.operationId || `op_plan_${plan.id}_${Date.now()}`;
+    const mutationSource = options.mutationSource || 'LOCAL';
+    const repo = this.repos.installmentPlans || this.installmentPlanRepo;
+
+    await repo.save(plan);
+
+    if (mutationSource === 'REMOTE') {
+      return;
+    }
+
+    const dependsOn: SyncDependency[] = options.dependsOn ? [...options.dependsOn] : [];
+    if (plan.accountId) {
+      dependsOn.push({ entityName: 'accounts', entityId: plan.accountId });
+    }
+    if (plan.creditCardId) {
+      dependsOn.push({ entityName: 'creditCards', entityId: plan.creditCardId });
+    }
+
+    await this.queue.enqueue({
+      operationId,
+      correlationId: options.correlationId,
+      mutationSource,
+      entityName: 'installmentPlans',
+      entityId: plan.id,
+      action: 'create',
+      payload: plan,
+      revision: plan.revision || 1,
+      dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+    });
+
+    this.setStatus('pending');
+    this.triggerBackgroundProcessing();
+  }
+
+  async deleteInstallmentPlan(id: string, opId?: string): Promise<void> {
+    const operationId = opId || `op_plan_del_${id}_${Date.now()}`;
+    const now = new Date().toISOString();
+    const repo = this.repos.installmentPlans || this.installmentPlanRepo;
+
+    const existing = await repo.getById(id, true);
+    const tombstoneRevision = (existing?.tombstoneRevision || existing?.revision || 1) + 1;
+
+    const tombstone: TombstoneMetadata = {
+      deleted: true,
+      deletedAt: now,
+      tombstoneRevision,
+    };
+
+    // Soft delete / tombstone no repositório local
+    await repo.delete(id);
+
+    // Enfileira exclusão com soft delete / tombstone
+    await this.queue.enqueue({
+      operationId,
+      entityName: 'installmentPlans',
+      entityId: id,
+      action: 'delete',
+      tombstone,
+      revision: tombstoneRevision,
     });
 
     this.setStatus('pending');
@@ -984,8 +1378,8 @@ export class FinancialSyncService {
                 await this.queue.recordFailure(item.id, result.error || 'Erro ao enviar mutação');
               }
             }
-          } catch (err: any) {
-            await this.queue.recordFailure(item.id, err?.message || 'Erro inesperado');
+          } catch (err: unknown) {
+            await this.queue.recordFailure(item.id, getErrorMessage(err));
           }
         }
 
@@ -997,7 +1391,7 @@ export class FinancialSyncService {
 
       const remaining = await this.queue.count();
       this.setStatus(remaining > 0 ? 'pending' : 'synced');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[FinancialSyncService] Falha geral ao processar fila:', error);
       this.setStatus('error');
     }

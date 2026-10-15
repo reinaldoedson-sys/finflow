@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { InvestmentAsset, AssetClass } from '../types/finance';
-import { POPULAR_TICKERS, fetchMarketQuotes } from '../services/marketQuotes';
+import { POPULAR_TICKERS, fetchMarketQuotes, guessAssetSector, STOCK_SECTORS, FII_SEGMENTS } from '../services/marketQuotes';
 import { formatCurrency } from '../utils/currency';
 import { 
   calculateInvestmentCost, 
   calculateInvestmentValue, 
   calculateUnrealizedProfit 
 } from '../domain/investments';
-import { X, TrendingUp, Sparkles, RefreshCw, AlertCircle, Building2, Check } from 'lucide-react';
+import { X, TrendingUp, Sparkles, RefreshCw, AlertCircle, Check } from 'lucide-react';
 
 interface InvestmentModalProps {
   isOpen: boolean;
@@ -21,7 +21,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
   onClose,
   editAsset,
 }) => {
-  const { addInvestment, updateInvestment, addInvestmentTransaction, currency } = useFinance();
+  const { addInvestment, updateInvestment, addInvestmentTransaction } = useFinance();
 
   const [ticker, setTicker] = useState('');
   const [name, setName] = useState('');
@@ -30,6 +30,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
   const [averagePrice, setAveragePrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
   const [institution, setInstitution] = useState('');
+  const [sector, setSector] = useState('');
   const [assetCurrency, setAssetCurrency] = useState<'BRL' | 'USD'>('BRL');
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [notes, setNotes] = useState('');
@@ -46,6 +47,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
       setAveragePrice(editAsset.averagePrice.toString());
       setCurrentPrice(editAsset.currentPrice.toString());
       setInstitution(editAsset.institution || '');
+      setSector(editAsset.sector || guessAssetSector(editAsset.ticker, editAsset.type));
       setAssetCurrency(editAsset.currency || 'BRL');
       setAutoUpdate(editAsset.autoUpdate);
       setNotes(editAsset.notes || '');
@@ -57,6 +59,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
       setAveragePrice('');
       setCurrentPrice('');
       setInstitution('');
+      setSector('');
       setAssetCurrency('BRL');
       setAutoUpdate(true);
       setNotes('');
@@ -72,6 +75,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
     setTicker(pop.ticker);
     setName(pop.name);
     setType(pop.type);
+    setSector(pop.sector || guessAssetSector(pop.ticker, pop.type));
     setAutoUpdate(true);
     await handleFetchLivePrice(pop.ticker);
   };
@@ -140,11 +144,13 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
     }
 
     try {
+      const resolvedSector = sector.trim() || guessAssetSector(cleanTicker, type);
       if (editAsset) {
         await updateInvestment(editAsset.id, {
           ticker: cleanTicker,
           name: cleanName,
           type,
+          sector: resolvedSector,
           quantity: parsedQty,
           averagePrice: parsedAvgPrice,
           currentPrice: parsedCurrentPrice,
@@ -158,6 +164,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
           ticker: cleanTicker,
           name: cleanName,
           type,
+          sector: resolvedSector,
           quantity: parsedQty,
           averagePrice: parsedAvgPrice,
           currentPrice: parsedCurrentPrice,
@@ -342,6 +349,33 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/80 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
               />
             </div>
+          </div>
+
+          {/* Sector / Segment */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300">
+                Setor da Ação ou Segmento do FII
+              </label>
+              <span className="text-[10px] text-slate-400">
+                Usado no Monitoramento e Análise Setorial
+              </span>
+            </div>
+            <input
+              type="text"
+              list="sectors-suggestions"
+              value={sector}
+              onChange={(e) => setSector(e.target.value)}
+              placeholder="Ex: Financeiro & Bancos, Petróleo, Logística & Galpões, Papel / CRI"
+              className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/80 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+            <datalist id="sectors-suggestions">
+              {type === 'fii' ? (
+                FII_SEGMENTS.map(s => <option key={s} value={s} />)
+              ) : (
+                STOCK_SECTORS.map(s => <option key={s} value={s} />)
+              )}
+            </datalist>
           </div>
 
           {/* Quantity, Average Price & Current Price */}

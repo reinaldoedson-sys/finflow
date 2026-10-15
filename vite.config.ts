@@ -1,9 +1,9 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import fs from 'fs';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { getQuotes, normalizeSymbols } from './server/quotes.ts';
 
 export default defineConfig(() => {
   return {
@@ -13,92 +13,29 @@ export default defineConfig(() => {
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
             const rawUrl = req.url ? req.url.split('?')[0] : '';
-            if (rawUrl === '/sw.js') {
-              try {
-                const swCode = fs.readFileSync(path.resolve(import.meta.dirname, 'public/sw.js'), 'utf-8');
-                res.writeHead(200, {
-                  'Content-Type': 'application/javascript; charset=utf-8',
-                  'Cache-Control': 'no-store, no-cache, must-revalidate',
-                  'Service-Worker-Allowed': '/'
-                });
-                res.end(swCode);
-                return;
-              } catch {
-                next();
-                return;
-              }
-            }
-            if (rawUrl === '/manifest.json' || rawUrl === '/manifest.webmanifest') {
-              try {
-                const manifestCode = fs.readFileSync(path.resolve(import.meta.dirname, 'public/manifest.json'), 'utf-8');
-                res.writeHead(200, {
-                  'Content-Type': 'application/manifest+json; charset=utf-8',
-                  'Cache-Control': 'no-cache'
-                });
-                res.end(manifestCode);
-                return;
-              } catch {
-                next();
-                return;
-              }
-            }
             if (rawUrl === '/api/quotes') {
               (async () => {
                 try {
                   const urlObj = new URL(req.url || '', 'http://localhost:3000');
                   const symbolsParam = urlObj.searchParams.get('symbols') || '';
-                  const symbols = symbolsParam
-                    .split(',')
-                    .map(s => s.trim().toUpperCase())
-                    .filter(Boolean);
+                  const symbols = normalizeSymbols(symbolsParam);
 
                   if (symbols.length === 0) {
-                    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-                    res.end(JSON.stringify({ success: true, quotes: {} }));
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ success: true, quotes: {}, timestamp: new Date().toISOString() }));
                     return;
                   }
 
-                  const quotes: Record<string, any> = {};
-                  await Promise.all(symbols.map(async (rawSymbol) => {
-                    let yahooSymbol = rawSymbol;
-                    if (rawSymbol === 'BTC' || rawSymbol === 'BITCOIN') yahooSymbol = 'BTC-USD';
-                    else if (rawSymbol === 'ETH' || rawSymbol === 'ETHEREUM') yahooSymbol = 'ETH-USD';
-                    else if (rawSymbol === 'SOL' || rawSymbol === 'SOLANA') yahooSymbol = 'SOL-USD';
-                    else if (/^[A-Z]{4}\d{1,2}$/i.test(rawSymbol) && !rawSymbol.endsWith('.SA')) {
-                      yahooSymbol = `${rawSymbol}.SA`;
-                    }
-
-                    try {
-                      const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&range=1d`, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-                      });
-                      const data = await response.json();
-                      const meta = data?.chart?.result?.[0]?.meta;
-                      if (meta && typeof meta.regularMarketPrice === 'number') {
-                        quotes[rawSymbol] = {
-                          symbol: rawSymbol,
-                          name: meta.shortName || meta.symbol || rawSymbol,
-                          price: meta.regularMarketPrice,
-                          previousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
-                          changePercent: typeof meta.regularMarketChangePercent === 'number' ? meta.regularMarketChangePercent : 0,
-                          currency: meta.currency || 'BRL',
-                          updatedAt: new Date().toISOString()
-                        };
-                      }
-                    } catch (e) {
-                      // ignore individual ticker fetch errors
-                    }
-                  }));
+                  const quotes = await getQuotes(symbols);
 
                   res.writeHead(200, {
                     'Content-Type': 'application/json; charset=utf-8',
-                    'Access-Control-Allow-Origin': '*',
                     'Cache-Control': 'public, max-age=30'
                   });
                   res.end(JSON.stringify({ success: true, quotes, timestamp: new Date().toISOString() }));
                 } catch (err: any) {
-                  res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-                  res.end(JSON.stringify({ success: false, error: err.message }));
+                  res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                  res.end(JSON.stringify({ success: false, error: err?.message || 'Internal error' }));
                 }
               })();
               return;
@@ -110,7 +47,7 @@ export default defineConfig(() => {
       react(),
       tailwindcss(),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         includeAssets: [
           'favicon.ico',
           'apple-touch-icon.png',
@@ -153,6 +90,10 @@ export default defineConfig(() => {
           ]
         },
         workbox: {
+          cleanupOutdatedCaches: true,
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api\/.*/],
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           runtimeCaching: [
             {
@@ -182,6 +123,14 @@ export default defineConfig(() => {
                   statuses: [0, 200]
                 }
               }
+            },
+            {
+              urlPattern: /^\/api\/.*/i,
+              handler: 'NetworkOnly'
+            },
+            {
+              urlPattern: /^https:\/\/.*(?:firebaseio\.com|googleapis\.com|firestore|identitytoolkit).*/i,
+              handler: 'NetworkOnly'
             }
           ]
         },

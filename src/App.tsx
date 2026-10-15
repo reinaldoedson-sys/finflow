@@ -13,12 +13,14 @@ import { BackupModal } from './components/BackupModal';
 import { InstallmentModal } from './components/InstallmentModal';
 import { InvestmentModal } from './components/InvestmentModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
+import { UpdateBanner } from './components/UpdateBanner';
 import { MobileBottomNav } from './components/MobileBottomNav';
 
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
 import { AccountsView } from './views/AccountsView';
 import { InvestmentsView } from './views/InvestmentsView';
+import { PortfolioMonitoringView } from './views/PortfolioMonitoringView';
 import { BudgetsView } from './views/BudgetsView';
 import { GoalsView } from './views/GoalsView';
 import { InstallmentsView } from './views/InstallmentsView';
@@ -162,6 +164,7 @@ const FinFlowApp: React.FC = () => {
 
       {/* Main View Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-24 md:pb-6">
+        <UpdateBanner />
         <PWAInstallBanner />
         {currentTab === 'dashboard' && (
           <DashboardView
@@ -190,10 +193,19 @@ const FinFlowApp: React.FC = () => {
           />
         )}
 
+        {currentTab === 'portfolio' && (
+          <PortfolioMonitoringView
+            onOpenNewInvestment={handleOpenNewInvestment}
+            onEditInvestment={handleEditInvestment}
+            onNavigateToInvestments={() => setCurrentTab('investments')}
+          />
+        )}
+
         {currentTab === 'investments' && (
           <InvestmentsView
             onOpenNewInvestment={handleOpenNewInvestment}
             onEditInvestment={handleEditInvestment}
+            onNavigateToPortfolio={() => setCurrentTab('portfolio')}
           />
         )}
 

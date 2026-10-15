@@ -1,5 +1,4 @@
 import { calculateGoalBalance, GoalMovement } from '../src/domain/calculations';
-import { toCents, fromCents } from '../src/domain/money';
 
 let passed = 0;
 let failed = 0;

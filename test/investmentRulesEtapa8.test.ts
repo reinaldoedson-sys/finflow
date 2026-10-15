@@ -32,11 +32,11 @@ assert(
 );
 
 // Teste 3: create e update bloqueiam campos arbitrários com hasOnly
-const hasOnlyPattern = "hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'userId', 'createdAt'])";
-const hasOnlyOccurrences = rulesContent.split(hasOnlyPattern).length - 1;
+const hasCreateHasOnly = rulesContent.includes("incoming().keys().hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'sector', 'userId', 'createdAt', 'revision', 'updatedAt'])");
+const hasUpdateHasOnly = rulesContent.includes("incoming().keys().hasOnly(['ticker', 'name', 'type', 'quantity', 'averagePrice', 'currentPrice', 'previousClose', 'changePercent', 'currency', 'institution', 'autoUpdate', 'lastPriceUpdate', 'notes', 'sector', 'userId', 'createdAt', 'revision', 'updatedAt', 'deleted', 'deletedAt', 'tombstoneRevision', 'reason'])");
 assert(
-  hasOnlyOccurrences >= 2,
-  `Teste 3: hasOnly restritivo com 15 campos presentes em create e update (encontradas ${hasOnlyOccurrences} ocorrências)`
+  hasCreateHasOnly && hasUpdateHasOnly,
+  'Teste 3: hasOnly restritivo presente em create e update para investments'
 );
 
 // Teste 4: Imutabilidade de createdAt e userId no update

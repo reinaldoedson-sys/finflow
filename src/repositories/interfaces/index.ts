@@ -5,4 +5,6 @@ export * from './CreditCardRepository';
 export * from './InvestmentRepository';
 export * from './GoalRepository';
 export * from './BudgetRepository';
+export * from './CategoryRepository';
+export * from './InstallmentPlanRepository';
 export * from './SyncQueueRepository';

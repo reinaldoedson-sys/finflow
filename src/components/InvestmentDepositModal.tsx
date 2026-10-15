@@ -7,15 +7,11 @@ import { calculateTransactionTotal } from '../domain/investmentTransactions';
 import { 
   X, 
   TrendingUp, 
-  Wallet, 
   Calendar, 
   FileText, 
-  DollarSign, 
   ArrowRight, 
   Sparkles, 
   AlertCircle,
-  CheckCircle2,
-  Coins,
   RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
