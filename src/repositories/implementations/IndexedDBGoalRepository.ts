@@ -12,13 +12,13 @@ export class IndexedDBGoalRepository implements GoalRepository {
   async getAllGoals(includeDeleted = false): Promise<FinancialGoal[]> {
     const goals = await this.database.goals.toArray();
     if (includeDeleted) return goals;
-    return goals.filter(g => !(g as any).deleted);
+    return goals.filter(g => !g.deleted);
   }
 
   async getGoalById(id: string, includeDeleted = false): Promise<FinancialGoal | null> {
     const goal = await this.database.goals.get(id);
     if (!goal) return null;
-    if (!includeDeleted && (goal as any).deleted) return null;
+    if (!includeDeleted && goal.deleted) return null;
     return goal;
   }
 
@@ -44,8 +44,8 @@ export class IndexedDBGoalRepository implements GoalRepository {
             ...existing,
             deleted: true,
             deletedAt: now,
-            tombstoneRevision: ((existing as any)?.tombstoneRevision || (existing as any)?.revision || 1) + 1,
-          } as any);
+            tombstoneRevision: (existing.tombstoneRevision || existing.revision || 1) + 1,
+          });
         } else {
           await this.database.goals.delete(id);
         }
@@ -57,9 +57,9 @@ export class IndexedDBGoalRepository implements GoalRepository {
             ...m,
             deleted: true,
             deletedAt: now,
-            tombstoneRevision: ((m as any)?.tombstoneRevision || (m as any)?.revision || 1) + 1,
+            tombstoneRevision: (m.tombstoneRevision || m.revision || 1) + 1,
           }));
-          await this.database.goalMovements.bulkPut(tombstonedMovs as any);
+          await this.database.goalMovements.bulkPut(tombstonedMovs);
         }
       }
     );
@@ -80,14 +80,14 @@ export class IndexedDBGoalRepository implements GoalRepository {
 
   async getAllMovements(includeDeleted = false): Promise<GoalMovement[]> {
     const movements = await this.database.goalMovements.toArray();
-    const filtered = includeDeleted ? movements : movements.filter(m => !(m as any).deleted);
+    const filtered = includeDeleted ? movements : movements.filter(m => !m.deleted);
     return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   async getMovementById(id: string, includeDeleted = false): Promise<GoalMovement | null> {
     const movement = await this.database.goalMovements.get(id);
     if (!movement) return null;
-    if (!includeDeleted && (movement as any).deleted) return null;
+    if (!includeDeleted && movement.deleted) return null;
     return movement;
   }
 
@@ -97,7 +97,7 @@ export class IndexedDBGoalRepository implements GoalRepository {
       .equals(goalId)
       .toArray();
 
-    const filtered = includeDeleted ? movements : movements.filter(m => !(m as any).deleted);
+    const filtered = includeDeleted ? movements : movements.filter(m => !m.deleted);
     return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
@@ -118,8 +118,8 @@ export class IndexedDBGoalRepository implements GoalRepository {
         ...existing,
         deleted: true,
         deletedAt: new Date().toISOString(),
-        tombstoneRevision: ((existing as any)?.tombstoneRevision || (existing as any)?.revision || 1) + 1,
-      } as any);
+        tombstoneRevision: (existing.tombstoneRevision || existing.revision || 1) + 1,
+      });
     } else {
       await this.database.goalMovements.delete(id);
     }

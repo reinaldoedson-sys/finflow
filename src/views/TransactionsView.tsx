@@ -202,7 +202,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           {/* Type selector */}
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as any)}
+            onChange={(e) => setTypeFilter(e.target.value as 'all' | TransactionType)}
             className="px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-md text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
           >
             <option value="all">Todos os tipos</option>
@@ -245,7 +245,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           {/* Status selector */}
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'completed' | 'pending')}
             className="px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-md text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
           >
             <option value="all">Qualquer situação</option>
@@ -258,7 +258,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <Layers className="w-3.5 h-3.5 text-purple-400 shrink-0" />
             <select
               value={installmentFilter}
-              onChange={(e) => setInstallmentFilter(e.target.value as any)}
+              onChange={(e) => setInstallmentFilter(e.target.value as 'current_month' | 'all' | 'none')}
               className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer"
             >
               <option value="current_month">Parcelas: Mês vigente (limpo)</option>

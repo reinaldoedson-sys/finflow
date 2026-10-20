@@ -8,13 +8,13 @@ export class IndexedDBInstallmentPlanRepository implements InstallmentPlanReposi
   async getAll(includeDeleted = false): Promise<InstallmentPlan[]> {
     const items = await this.database.installmentPlans.toArray();
     if (includeDeleted) return items;
-    return items.filter(p => !(p as any).deleted);
+    return items.filter(p => !p.deleted);
   }
 
   async getById(id: string, includeDeleted = false): Promise<InstallmentPlan | null> {
     const item = await this.database.installmentPlans.get(id);
     if (!item) return null;
-    if (!includeDeleted && (item as any).deleted) return null;
+    if (!includeDeleted && item.deleted) return null;
     return item;
   }
 
@@ -36,8 +36,8 @@ export class IndexedDBInstallmentPlanRepository implements InstallmentPlanReposi
         ...existing,
         deleted: true,
         deletedAt: now,
-        tombstoneRevision: ((existing as any)?.tombstoneRevision || (existing as any)?.revision || 1) + 1,
-      } as any);
+        tombstoneRevision: (existing.tombstoneRevision || existing.revision || 1) + 1,
+      });
     } else {
       await this.database.installmentPlans.put({
         id,
@@ -54,7 +54,7 @@ export class IndexedDBInstallmentPlanRepository implements InstallmentPlanReposi
         deleted: true,
         deletedAt: now,
         tombstoneRevision: 1,
-      } as any);
+      });
     }
   }
 
@@ -74,7 +74,7 @@ export class IndexedDBInstallmentPlanRepository implements InstallmentPlanReposi
   async count(includeDeleted = false): Promise<number> {
     const items = await this.database.installmentPlans.toArray();
     if (includeDeleted) return items.length;
-    return items.filter(p => !(p as any).deleted).length;
+    return items.filter(p => !p.deleted).length;
   }
 
   async getByAccountId(accountId: string, includeDeleted = false): Promise<InstallmentPlan[]> {
@@ -84,7 +84,7 @@ export class IndexedDBInstallmentPlanRepository implements InstallmentPlanReposi
       .toArray();
 
     if (includeDeleted) return items;
-    return items.filter(p => !(p as any).deleted);
+    return items.filter(p => !p.deleted);
   }
 
   async getByCreditCardId(creditCardId: string, includeDeleted = false): Promise<InstallmentPlan[]> {
@@ -94,6 +94,6 @@ export class IndexedDBInstallmentPlanRepository implements InstallmentPlanReposi
       .toArray();
 
     if (includeDeleted) return items;
-    return items.filter(p => !(p as any).deleted);
+    return items.filter(p => !p.deleted);
   }
 }

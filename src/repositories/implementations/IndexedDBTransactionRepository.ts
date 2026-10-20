@@ -11,14 +11,14 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
 
   async getAll(includeDeleted = false): Promise<Transaction[]> {
     const items = await this.database.transactions.toArray();
-    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    const filtered = includeDeleted ? items : items.filter(t => !t.deleted);
     return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   async getById(id: string, includeDeleted = false): Promise<Transaction | null> {
     const item = await this.database.transactions.get(id);
     if (!item) return null;
-    if (!includeDeleted && (item as any).deleted) return null;
+    if (!includeDeleted && item.deleted) return null;
     return item;
   }
 
@@ -39,8 +39,8 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
         ...existing,
         deleted: true,
         deletedAt: new Date().toISOString(),
-        tombstoneRevision: ((existing as any)?.tombstoneRevision || (existing as any)?.revision || 1) + 1,
-      } as any);
+        tombstoneRevision: (existing.tombstoneRevision || existing.revision || 1) + 1,
+      });
     } else {
       await this.database.transactions.delete(id);
     }
@@ -62,7 +62,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
   async count(includeDeleted = false): Promise<number> {
     const items = await this.database.transactions.toArray();
     if (includeDeleted) return items.length;
-    return items.filter(t => !(t as any).deleted).length;
+    return items.filter(t => !t.deleted).length;
   }
 
   async getByDateRange(startDate?: string, endDate?: string, includeDeleted = false): Promise<Transaction[]> {
@@ -77,7 +77,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
     }
 
     const items = await collection.toArray();
-    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    const filtered = includeDeleted ? items : items.filter(t => !t.deleted);
     return filtered.sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
@@ -94,7 +94,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
       .between(start, end, true, true)
       .toArray();
 
-    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    const filtered = includeDeleted ? items : items.filter(t => !t.deleted);
     return filtered.sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
@@ -108,7 +108,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
       .equals(accountId)
       .toArray();
 
-    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    const filtered = includeDeleted ? items : items.filter(t => !t.deleted);
     return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
@@ -118,7 +118,7 @@ export class IndexedDBTransactionRepository implements TransactionRepository {
       .equals(creditCardId)
       .toArray();
 
-    const filtered = includeDeleted ? items : items.filter(t => !(t as any).deleted);
+    const filtered = includeDeleted ? items : items.filter(t => !t.deleted);
     return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 

@@ -8,7 +8,7 @@ interface CategoryIconProps {
 }
 
 export const CategoryIcon: React.FC<CategoryIconProps> = ({ name, className = 'w-4 h-4', color }) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const IconComponent = (Icons as any)[name] || Icons.HelpCircle;
+  const iconMap = Icons as unknown as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
+  const IconComponent = iconMap[name] || Icons.HelpCircle;
   return <IconComponent className={className} style={color ? { color } : undefined} />;
 };

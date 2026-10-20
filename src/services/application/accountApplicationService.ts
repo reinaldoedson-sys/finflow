@@ -2,8 +2,8 @@ import { generateId } from '../../domain/id';
 import type { FinancialSyncService } from '../financialSyncService';
 import type { Account } from '../../types/finance';
 
-export interface CreateAccountDTO extends Omit<Account, 'id' | 'currentBalance'> {}
-export interface UpdateAccountDTO extends Partial<Account> {}
+export type CreateAccountDTO = Omit<Account, 'id' | 'currentBalance'>;
+export type UpdateAccountDTO = Partial<Account>;
 
 /**
  * Application Service responsável pelos casos de uso de Contas Bancárias:

@@ -3,9 +3,9 @@ import { resolveGoalInitialAmount, calculateGoalBalance } from '../../domain/cal
 import type { FinancialSyncService } from '../financialSyncService';
 import type { FinancialGoal, GoalMovement, GoalMovementType } from '../../types/finance';
 
-export interface CreateGoalDTO extends Omit<FinancialGoal, 'id' | 'currentAmount'> {}
-export interface UpdateGoalDTO extends Partial<FinancialGoal> {}
-export interface CreateGoalMovementDTO extends Omit<GoalMovement, 'id' | 'createdAt'> {}
+export type CreateGoalDTO = Omit<FinancialGoal, 'id' | 'currentAmount'>;
+export type UpdateGoalDTO = Partial<FinancialGoal>;
+export type CreateGoalMovementDTO = Omit<GoalMovement, 'id' | 'createdAt'>;
 
 export interface AddMovementResult {
   movement: GoalMovement;
@@ -42,7 +42,7 @@ export class GoalApplicationService {
     }
 
     const newId = generateId('goal');
-    const initialAmount = (data as any).initialAmount ?? 0;
+    const initialAmount = data.initialAmount ?? 0;
     const newGoal: FinancialGoal = {
       ...data,
       id: newId,

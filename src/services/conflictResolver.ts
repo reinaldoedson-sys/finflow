@@ -1,4 +1,5 @@
 import type { SyncEntityName, TombstoneMetadata } from './syncTypes';
+import type { SyncMetadata } from '../types/finance';
 
 export type ConflictResolutionAction =
   | 'use_local'
@@ -7,21 +8,20 @@ export type ConflictResolutionAction =
   | 'preserve_both'
   | 'mark_deleted';
 
-export interface ConflictResolutionResult<T = any> {
+export interface ConflictResolutionResult<T = unknown> {
   action: ConflictResolutionAction;
   resolvedItem?: T;
   divergenceDetected: boolean;
   reason: string;
 }
 
-export interface VersionedEntity {
+export interface VersionedEntity extends SyncMetadata {
   id: string;
-  revision?: number;
-  updatedAt?: string;
   createdAt?: string;
-  deleted?: boolean;
-  deletedAt?: string;
-  [key: string]: any;
+  amount?: number;
+  type?: string;
+  date?: string;
+  accountId?: string;
 }
 
 /**
@@ -49,7 +49,7 @@ export class ConflictResolver {
     }
 
     if (localItem?.deleted) {
-      const localRev = (localItem as any).tombstoneRevision || localItem.revision || 1;
+      const localRev = localItem.tombstoneRevision || localItem.revision || 1;
       const remoteRev = remoteItem?.revision ?? 0;
       if (localRev >= remoteRev) {
         return {

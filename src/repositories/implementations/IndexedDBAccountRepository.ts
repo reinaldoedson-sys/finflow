@@ -8,13 +8,13 @@ export class IndexedDBAccountRepository implements AccountRepository {
   async getAll(includeDeleted = false): Promise<Account[]> {
     const items = await this.database.accounts.toArray();
     if (includeDeleted) return items;
-    return items.filter(a => !(a as any).deleted);
+    return items.filter(a => !a.deleted);
   }
 
   async getById(id: string, includeDeleted = false): Promise<Account | null> {
     const item = await this.database.accounts.get(id);
     if (!item) return null;
-    if (!includeDeleted && (item as any).deleted) return null;
+    if (!includeDeleted && item.deleted) return null;
     return item;
   }
 
@@ -35,8 +35,8 @@ export class IndexedDBAccountRepository implements AccountRepository {
         ...existing,
         deleted: true,
         deletedAt: new Date().toISOString(),
-        tombstoneRevision: ((existing as any)?.tombstoneRevision || (existing as any)?.revision || 1) + 1,
-      } as any);
+        tombstoneRevision: (existing.tombstoneRevision || existing.revision || 1) + 1,
+      });
     } else {
       await this.database.accounts.delete(id);
     }
@@ -58,13 +58,13 @@ export class IndexedDBAccountRepository implements AccountRepository {
   async count(includeDeleted = false): Promise<number> {
     const items = await this.database.accounts.toArray();
     if (includeDeleted) return items.length;
-    return items.filter(a => !(a as any).deleted).length;
+    return items.filter(a => !a.deleted).length;
   }
 
   async getByType(type: Account['type'], includeDeleted = false): Promise<Account[]> {
     const items = await this.database.accounts.where('type').equals(type).toArray();
     if (includeDeleted) return items;
-    return items.filter(a => !(a as any).deleted);
+    return items.filter(a => !a.deleted);
   }
 
   async saveBalanceSnapshot(id: string, balanceSnapshot: number): Promise<void> {

@@ -8,13 +8,13 @@ export class IndexedDBCategoryRepository implements CategoryRepository {
   async getAll(includeDeleted = false): Promise<Category[]> {
     const items = await this.database.categories.toArray();
     if (includeDeleted) return items;
-    return items.filter(c => !(c as any).deleted);
+    return items.filter(c => !c.deleted);
   }
 
   async getById(id: string, includeDeleted = false): Promise<Category | null> {
     const item = await this.database.categories.get(id);
     if (!item) return null;
-    if (!includeDeleted && (item as any).deleted) return null;
+    if (!includeDeleted && item.deleted) return null;
     return item;
   }
 
@@ -36,8 +36,8 @@ export class IndexedDBCategoryRepository implements CategoryRepository {
         ...existing,
         deleted: true,
         deletedAt: now,
-        tombstoneRevision: ((existing as any)?.tombstoneRevision || (existing as any)?.revision || 1) + 1,
-      } as any);
+        tombstoneRevision: (existing.tombstoneRevision || existing.revision || 1) + 1,
+      });
     } else {
       await this.database.categories.put({
         id,
@@ -48,7 +48,7 @@ export class IndexedDBCategoryRepository implements CategoryRepository {
         deleted: true,
         deletedAt: now,
         tombstoneRevision: 1,
-      } as any);
+      });
     }
   }
 
@@ -68,7 +68,7 @@ export class IndexedDBCategoryRepository implements CategoryRepository {
   async count(includeDeleted = false): Promise<number> {
     const items = await this.database.categories.toArray();
     if (includeDeleted) return items.length;
-    return items.filter(c => !(c as any).deleted).length;
+    return items.filter(c => !c.deleted).length;
   }
 
   async getByType(type: 'expense' | 'income' | 'both', includeDeleted = false): Promise<Category[]> {
@@ -78,6 +78,6 @@ export class IndexedDBCategoryRepository implements CategoryRepository {
       .toArray();
 
     if (includeDeleted) return items;
-    return items.filter(c => !(c as any).deleted);
+    return items.filter(c => !c.deleted);
   }
 }

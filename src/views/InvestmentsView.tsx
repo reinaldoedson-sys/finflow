@@ -544,7 +544,6 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredAssets.map((asset) => {
             const meta = ASSET_TYPE_LABELS[asset.type] || ASSET_TYPE_LABELS.other;
-            const assetCost = calculateInvestmentCost(asset);
             const assetValue = calculateInvestmentValue(asset);
             const { profitLoss: assetProfit, profitLossPercent: assetProfitPercent } = calculateUnrealizedProfit(asset);
             const hasChange = typeof asset.changePercent === 'number';

@@ -8,13 +8,13 @@ export class IndexedDBCreditCardRepository implements CreditCardRepository {
   async getAll(includeDeleted = false): Promise<CreditCard[]> {
     const items = await this.database.creditCards.toArray();
     if (includeDeleted) return items;
-    return items.filter(c => !(c as any).deleted);
+    return items.filter(c => !c.deleted);
   }
 
   async getById(id: string, includeDeleted = false): Promise<CreditCard | null> {
     const item = await this.database.creditCards.get(id);
     if (!item) return null;
-    if (!includeDeleted && (item as any).deleted) return null;
+    if (!includeDeleted && item.deleted) return null;
     return item;
   }
 
@@ -35,7 +35,7 @@ export class IndexedDBCreditCardRepository implements CreditCardRepository {
         ...existing,
         deleted: true,
         deletedAt: new Date().toISOString(),
-      } as any);
+      });
     } else {
       await this.database.creditCards.delete(id);
     }
@@ -57,7 +57,7 @@ export class IndexedDBCreditCardRepository implements CreditCardRepository {
   async count(includeDeleted = false): Promise<number> {
     const items = await this.database.creditCards.toArray();
     if (includeDeleted) return items.length;
-    return items.filter(c => !(c as any).deleted).length;
+    return items.filter(c => !c.deleted).length;
   }
 
   async saveInvoiceSnapshot(id: string, invoiceSnapshot: number): Promise<void> {

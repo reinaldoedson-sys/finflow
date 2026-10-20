@@ -674,7 +674,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     return accounts.map(account => {
       const initial = typeof account.initialBalance === 'number'
         ? account.initialBalance
-        : (typeof (account as any).currentBalance === 'number' ? (account as any).currentBalance : 0);
+        : (typeof account.currentBalance === 'number' ? account.currentBalance : 0);
       return {
         ...account,
         initialBalance: initial,
@@ -921,7 +921,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     // 1. Preservação de integridade referencial:
     // Verifica existência de transações ou parcelamentos vinculados antes da exclusão
-    const linkedTransactions = transactions.filter(t => t.creditCardId === id && !(t as any).deleted);
+    const linkedTransactions = transactions.filter(t => t.creditCardId === id && !t.deleted);
     const linkedPlans = installmentPlans.filter(p => p.creditCardId === id);
 
     if (linkedTransactions.length > 0 || linkedPlans.length > 0) {

@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "test": "tsx test/creditCardInvoice.test.ts && tsx test/derivedFields.test.ts && tsx test/sync.test.ts && tsx test/goalLedger.test.ts && tsx test/goalLedgerEtapa7.test.ts && tsx test/investments.test.ts && tsx test/investmentRulesEtapa8.test.ts && tsx test/investmentTransactions.test.ts && tsx test/investmentAporte.test.ts && tsx test/goalPersistenceAndReset.test.ts && tsx test/investmentAporteFlow.test.ts && tsx test/investmentPosition.test.ts && tsx test/investmentLedgerIntegration.test.ts && tsx test/indexedDbMigration.test.ts && tsx test/indexedDBRepositories.test.ts && tsx test/syncService.test.ts && tsx test/multiEntityHardening.test.ts && tsx test/investmentMigrationEtapa28.test.ts && tsx test/tombstoneHardening.test.ts && tsx test/goalsAndBudgetsMigration.test.ts && tsx test/categoriesAndInstallmentsMigration.test.ts && tsx test/backupAndDemoServices.test.ts && tsx test/firestoreSyncHook.test.ts && tsx test/accountApplicationService.test.ts && tsx test/pinSecurity.test.ts && tsx test/quotesProvider.test.ts && tsx test/backupCrypto.test.ts",
+    "test": "tsx scripts/run-tests.ts",
     "lint": "tsc --noEmit",
     "lint:eslint": "eslint src server test"
   },

@@ -3,10 +3,11 @@ export type TransactionType = 'expense' | 'income' | 'transfer';
 export type PaymentMethod = 'pix' | 'credit_card' | 'debit_card' | 'bank_slip' | 'cash' | 'transfer';
 
 export interface SyncMetadata {
+  revision?: number;
   deleted?: boolean;
   deletedAt?: string;
   tombstoneRevision?: number;
-  revision?: number;
+  updatedAt?: string;
 }
 
 export interface Category extends SyncMetadata {
@@ -109,6 +110,8 @@ export interface FinancialGoal extends SyncMetadata {
   icon: string;
   notes?: string;
 }
+
+export type Goal = FinancialGoal;
 
 export interface SecuritySettings {
   isPinEnabled: boolean;

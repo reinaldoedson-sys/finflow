@@ -370,18 +370,18 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
 
       {/* Subnavegação de Seções */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto no-scrollbar text-xs">
-        {[
+        {([
           { id: 'overview', label: 'Visão Geral & Classes', icon: Layers },
           { id: 'sectors', label: 'Análise Setorial (Ações & FIIs)', icon: Building2 },
           { id: 'composition', label: 'Composição da Carteira', icon: PieChart },
           { id: 'assets', label: 'Resultado por Ativo', icon: BarChart3 },
-        ].map(tab => {
+        ] as const).map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`px-3.5 py-2 rounded-xl font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                 isActive
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
@@ -720,7 +720,7 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
               {/* Filtro por Classe */}
               <select
                 value={classFilter}
-                onChange={e => setClassFilter(e.target.value as any)}
+                onChange={e => setClassFilter(e.target.value as 'all' | AssetClass)}
                 className="px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-xl text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
               >
                 <option value="all">Todas as Classes</option>

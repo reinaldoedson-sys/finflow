@@ -21,6 +21,10 @@ import {
   ExternalLink
 } from 'lucide-react';
 
+interface NavigatorWithStandalone extends Navigator {
+  standalone?: boolean;
+}
+
 interface SettingsViewProps {
   onOpenBackupModal: () => void;
 }
@@ -73,7 +77,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
   const [isStandalone] = useState(() => {
     return (
       window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true ||
+      (window.navigator as NavigatorWithStandalone).standalone === true ||
       document.referrer.includes('android-app://')
     );
   });
@@ -722,7 +726,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
 
           <select
             value={newCatType}
-            onChange={(e) => setNewCatType(e.target.value as any)}
+            onChange={(e) => setNewCatType(e.target.value as 'expense' | 'income')}
             className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none"
           >
             <option value="expense">Despesa</option>

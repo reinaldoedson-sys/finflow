@@ -109,7 +109,7 @@ export class InvestmentApplicationService {
       throw new Error('ID do ativo é obrigatório para exclusão.');
     }
 
-    const activeLinked = linkedTxs.filter(t => t.assetId === id && !(t as any).deleted);
+    const activeLinked = linkedTxs.filter(t => t.assetId === id && !t.deleted);
     if (activeLinked.length > 0) {
       console.info(
         `[InvestmentApplicationService] Ativo ${id} possui ${activeLinked.length} transações vinculadas. ` +

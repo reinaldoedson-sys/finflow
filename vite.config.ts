@@ -33,9 +33,10 @@ export default defineConfig(() => {
                     'Cache-Control': 'public, max-age=30'
                   });
                   res.end(JSON.stringify({ success: true, quotes, timestamp: new Date().toISOString() }));
-                } catch (err: any) {
+                } catch (err: unknown) {
+                  const message = err instanceof Error ? err.message : 'Internal error';
                   res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-                  res.end(JSON.stringify({ success: false, error: err?.message || 'Internal error' }));
+                  res.end(JSON.stringify({ success: false, error: message }));
                 }
               })();
               return;

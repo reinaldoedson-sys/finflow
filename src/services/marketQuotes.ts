@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 /**
  * Market Quotes Service for FinFlow
  * Fetches real-time market prices from Yahoo Finance via the /api/quotes endpoint.
@@ -181,7 +182,7 @@ export async function fetchMarketQuotes(tickers: string[]): Promise<{
   const validTickers = tickers.map(t => t.trim().toUpperCase()).filter(Boolean);
 
   try {
-    const baseUrl = (import.meta as any).env?.VITE_QUOTES_API_URL || '/api/quotes';
+    const baseUrl = import.meta.env.VITE_QUOTES_API_URL || '/api/quotes';
     const separator = baseUrl.includes('?') ? '&' : '?';
     const response = await fetch(`${baseUrl}${separator}symbols=${encodeURIComponent(validTickers.join(','))}`);
     if (!response.ok) {

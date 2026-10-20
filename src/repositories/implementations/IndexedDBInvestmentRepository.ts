@@ -54,13 +54,13 @@ export class IndexedDBInvestmentRepository implements InvestmentRepository {
   async getAllAssets(includeDeleted = false): Promise<InvestmentAsset[]> {
     const items = await this.database.investments.toArray();
     if (includeDeleted) return items;
-    return items.filter(a => !(a as any).deleted);
+    return items.filter(a => !a.deleted);
   }
 
   async getAssetById(id: string, includeDeleted = false): Promise<InvestmentAsset | null> {
     const asset = await this.database.investments.get(id);
     if (!asset) return null;
-    if (!includeDeleted && (asset as any).deleted) return null;
+    if (!includeDeleted && asset.deleted) return null;
     return asset;
   }
 
@@ -88,7 +88,7 @@ export class IndexedDBInvestmentRepository implements InvestmentRepository {
             ...existing,
             deleted: true,
             deletedAt: now,
-          } as any);
+          });
         } else {
           await this.database.investments.delete(id);
         }
@@ -102,7 +102,7 @@ export class IndexedDBInvestmentRepository implements InvestmentRepository {
             deleted: true,
             deletedAt: now,
           }));
-          await this.database.investmentTransactions.bulkPut(tombstonedTxs as any);
+          await this.database.investmentTransactions.bulkPut(tombstonedTxs);
         }
       }
     );
@@ -124,14 +124,14 @@ export class IndexedDBInvestmentRepository implements InvestmentRepository {
 
   async getAllTransactions(includeDeleted = false): Promise<InvestmentTransaction[]> {
     const txs = await this.database.investmentTransactions.toArray();
-    const filtered = includeDeleted ? txs : txs.filter(t => !(t as any).deleted);
+    const filtered = includeDeleted ? txs : txs.filter(t => !t.deleted);
     return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   async getTransactionById(id: string, includeDeleted = false): Promise<InvestmentTransaction | null> {
     const tx = await this.database.investmentTransactions.get(id);
     if (!tx) return null;
-    if (!includeDeleted && (tx as any).deleted) return null;
+    if (!includeDeleted && tx.deleted) return null;
     return tx;
   }
 
@@ -141,7 +141,7 @@ export class IndexedDBInvestmentRepository implements InvestmentRepository {
       .equals(assetId)
       .toArray();
 
-    const filtered = includeDeleted ? txs : txs.filter(t => !(t as any).deleted);
+    const filtered = includeDeleted ? txs : txs.filter(t => !t.deleted);
     return filtered.sort((a, b) => b.date.localeCompare(a.date));
   }
 
@@ -162,7 +162,7 @@ export class IndexedDBInvestmentRepository implements InvestmentRepository {
         ...existing,
         deleted: true,
         deletedAt: new Date().toISOString(),
-      } as any);
+      });
     } else {
       await this.database.investmentTransactions.delete(id);
     }

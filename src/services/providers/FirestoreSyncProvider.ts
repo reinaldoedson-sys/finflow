@@ -105,12 +105,17 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
       const docRef = doc(this.firestore, 'users', this.userId, item.entityName, item.entityId);
       const cleanData = sanitizePayload(item.payload || {});
 
+      const payloadUpdatedAt =
+        item.payload && typeof item.payload === 'object' && 'updatedAt' in item.payload && typeof (item.payload as { updatedAt?: unknown }).updatedAt === 'string'
+          ? (item.payload as { updatedAt: string }).updatedAt
+          : undefined;
+
       // Anexa metadados de sincronização e revisão ao payload remoto
       const payloadToPersist = {
         ...cleanData,
         userId: this.userId,
         revision: item.revision,
-        updatedAt: (item.payload as any)?.updatedAt || new Date().toISOString(),
+        updatedAt: payloadUpdatedAt || new Date().toISOString(),
       };
 
       if (item.action === 'create') {

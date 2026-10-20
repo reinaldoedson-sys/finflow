@@ -70,16 +70,16 @@ export async function loadAllFinancialEntities(
     ]);
 
     return {
-      transactions: transactions.filter(t => !(t as any).deleted),
-      accounts: accounts.filter(a => !(a as any).deleted),
-      creditCards: creditCards.filter(c => !(c as any).deleted),
-      investments: investments.filter(i => !(i as any).deleted),
-      investmentTransactions: investmentTransactions.filter(it => !(it as any).deleted),
-      goals: goals.filter(g => !(g as any).deleted),
-      goalMovements: goalMovements.filter(gm => !(gm as any).deleted),
-      installmentPlans: installmentPlans.filter(p => !(p as any).deleted),
-      budgets: budgets.filter(b => !(b as any).deleted),
-      categories: categories.filter(c => !(c as any).deleted),
+      transactions: transactions.filter(t => !t.deleted),
+      accounts: accounts.filter(a => !a.deleted),
+      creditCards: creditCards.filter(c => !c.deleted),
+      investments: investments.filter(i => !i.deleted),
+      investmentTransactions: investmentTransactions.filter(it => !it.deleted),
+      goals: goals.filter(g => !g.deleted),
+      goalMovements: goalMovements.filter(gm => !gm.deleted),
+      installmentPlans: installmentPlans.filter(p => !p.deleted),
+      budgets: budgets.filter(b => !b.deleted),
+      categories: categories.filter(c => !c.deleted),
     };
   } catch (error) {
     console.error('[IndexedDB Repository] Erro ao carregar dados do IndexedDB:', error);
@@ -97,7 +97,7 @@ export async function replaceCollection<T extends { id: string }>(
   database: FinFlowDatabase = db
 ): Promise<boolean> {
   try {
-    const table = database[collectionName] as any;
+    const table = database.table<T, string>(collectionName);
     if (!table) return false;
 
     await database.transaction('rw', table, async () => {
@@ -123,7 +123,7 @@ export async function putItems<T extends { id: string }>(
   database: FinFlowDatabase = db
 ): Promise<boolean> {
   try {
-    const table = database[collectionName] as any;
+    const table = database.table<T, string>(collectionName);
     if (!table || items.length === 0) return true;
 
     await table.bulkPut(items);
@@ -143,7 +143,7 @@ export async function deleteItems(
   database: FinFlowDatabase = db
 ): Promise<boolean> {
   try {
-    const table = database[collectionName] as any;
+    const table = database.table(collectionName);
     if (!table || ids.length === 0) return true;
 
     await table.bulkDelete(ids);
