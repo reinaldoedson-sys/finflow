@@ -9,6 +9,7 @@ import {
   prepareAportePlan,
   checkAporteIdempotency,
   type PreparedAportePlan as AporteExecutionPlan,
+  type IdempotencyCheckResult,
 } from '../../domain/investmentAporte';
 import type { FinancialSyncService } from '../financialSyncService';
 import type {
@@ -19,10 +20,10 @@ import type {
   Transaction,
 } from '../../types/finance';
 
-export interface CreateAssetDTO extends Omit<InvestmentAsset, 'id' | 'createdAt'> {}
-export interface UpdateAssetDTO extends Partial<InvestmentAsset> {}
-export interface CreateInvestmentTxDTO extends Omit<InvestmentTransaction, 'id' | 'createdAt'> {}
-export interface UpdateInvestmentTxDTO extends Partial<InvestmentTransaction> {}
+export type CreateAssetDTO = Omit<InvestmentAsset, 'id' | 'createdAt'>;
+export type UpdateAssetDTO = Partial<InvestmentAsset>;
+export type CreateInvestmentTxDTO = Omit<InvestmentTransaction, 'id' | 'createdAt'>;
+export type UpdateInvestmentTxDTO = Partial<InvestmentTransaction>;
 
 export interface ExecuteAporteParams {
   assetId: string;
@@ -111,7 +112,7 @@ export class InvestmentApplicationService {
 
     const activeLinked = linkedTxs.filter(t => t.assetId === id && !t.deleted);
     if (activeLinked.length > 0) {
-      console.info(
+      console.warn(
         `[InvestmentApplicationService] Ativo ${id} possui ${activeLinked.length} transações vinculadas. ` +
         `Preservando histórico contábil e aplicando soft delete.`
       );
@@ -207,7 +208,7 @@ export class InvestmentApplicationService {
       categories: Category[];
       investmentTransactions: InvestmentTransaction[];
       transactions: Transaction[];
-      applyLocalPersist: (plan: AporteExecutionPlan, idempotency: any) => Promise<void>;
+      applyLocalPersist: (plan: AporteExecutionPlan, idempotency: IdempotencyCheckResult) => Promise<void>;
     }
   ): Promise<ExecuteAporteResult> {
     const { investments, accounts, categories, investmentTransactions, transactions, applyLocalPersist } = context;
@@ -248,7 +249,7 @@ export class InvestmentApplicationService {
     }
 
     const correlationId = params.idempotencyKey || `aporte_${plan.itxId}`;
-    const operations: any[] = [];
+    const operations: Parameters<FinancialSyncService['executeAtomicOperation']>[0]['operations'] = [];
 
     if (!idempotency.assetAlreadyUpdated) {
       operations.push({

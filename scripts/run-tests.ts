@@ -49,8 +49,9 @@ function main(): void {
     process.stdout.write(`[${i + 1}/${testFiles.length}] Executando ${relPath}... `);
 
     const startTime = Date.now();
-    // Executa usando tsx diretamente via npx para garantir portabilidade cross-platform
-    const child = spawnSync('npx', ['tsx', relPath], {
+    const localTsx = path.join(rootDir, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
+    const tsxExec = fs.existsSync(localTsx) ? localTsx : 'tsx';
+    const child = spawnSync(tsxExec, [relPath], {
       cwd: rootDir,
       encoding: 'utf8',
       env: { ...process.env, FORCE_COLOR: '1' }

@@ -8,7 +8,7 @@ import type {
 } from './syncTypes';
 import type { SyncQueueRepository } from '../repositories/interfaces/SyncQueueRepository';
 
-export interface EnqueueOptions<T = any> {
+export interface EnqueueOptions<T = unknown> {
   operationId: string;
   correlationId?: string;
   mutationSource?: SyncMutationSource;
@@ -40,7 +40,7 @@ export class SyncQueue {
    * Enfileira uma nova operação com coalescência inteligente e garantia de idempotência.
    * Operações com mutationSource === 'REMOTE' são estritamente descartadas (anti-eco).
    */
-  async enqueue<T = any>(options: EnqueueOptions<T>): Promise<SyncQueueItem<T> | null> {
+  async enqueue<T = unknown>(options: EnqueueOptions<T>): Promise<SyncQueueItem<T> | null> {
     const {
       operationId,
       correlationId,
@@ -96,7 +96,7 @@ export class SyncQueue {
           ...existing,
           operationId,
           correlationId: correlationId || existing.correlationId,
-          payload: { ...(existing.payload || {}), ...(payload || {}) },
+          payload: { ...(existing.payload as object || {}), ...(payload as object || {}) } as T,
           revision: Math.max(existing.revision, revision) + 1,
           dependsOn: dependsOn || existing.dependsOn,
           timestamp: now,
@@ -115,7 +115,7 @@ export class SyncQueue {
           ...existing,
           operationId,
           correlationId: correlationId || existing.correlationId,
-          payload: { ...(existing.payload || {}), ...(payload || {}) },
+          payload: { ...(existing.payload as object || {}), ...(payload as object || {}) } as T,
           revision: Math.max(existing.revision, revision) + 1,
           dependsOn: dependsOn || existing.dependsOn,
           timestamp: now,

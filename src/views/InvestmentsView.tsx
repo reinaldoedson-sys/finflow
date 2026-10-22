@@ -31,7 +31,6 @@ import { InvestmentTransactionModal } from '../components/InvestmentTransactionM
 import { InvestmentDepositModal } from '../components/InvestmentDepositModal';
 import { InvestmentDetailModal } from '../components/InvestmentDetailModal';
 import {
-  calculateInvestmentCost,
   calculateInvestmentValue,
   calculateUnrealizedProfit,
   calculatePortfolioValue,

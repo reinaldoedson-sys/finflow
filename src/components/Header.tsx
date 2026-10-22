@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSecurity } from '../context/SecurityContext';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
+import { preloadFirebase } from '../firebaseLoader';
 import { getMonthLabel } from '../utils/currency';
 import { 
   ChevronLeft, 
@@ -212,6 +213,8 @@ export const Header: React.FC<HeaderProps> = ({
               ) : (
                 <button
                   onClick={signInWithGoogle}
+                  onMouseEnter={() => { void preloadFirebase(); }}
+                  onFocus={() => { void preloadFirebase(); }}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-200 hover:text-white hover:bg-slate-700 transition-all text-xs whitespace-nowrap cursor-pointer"
                 >
                   <LogIn className="w-3.5 h-3.5 text-emerald-400" />

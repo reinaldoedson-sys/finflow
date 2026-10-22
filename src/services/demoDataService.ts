@@ -1,11 +1,5 @@
-import {
-  writeBatch,
-  doc,
-  collection,
-  getDocs,
-  type Firestore,
-} from 'firebase/firestore';
-import { db as defaultDb } from '../firebase';
+import type { Firestore, DocumentReference } from 'firebase/firestore';
+import { loadFirebase } from '../firebaseLoader';
 import {
   DEFAULT_CATEGORIES,
   INITIAL_ACCOUNTS,
@@ -68,7 +62,14 @@ export const FINANCIAL_SUBCOLLECTIONS: readonly SyncCollection[] = [
  * Totalmente isolado do ciclo de vida React.
  */
 export class DemoDataService {
-  constructor(private firestore: Firestore = defaultDb) {}
+  constructor(private firestore?: Firestore) {}
+
+  private async getFirestore(): Promise<Firestore> {
+    if (this.firestore) return this.firestore;
+    const { db } = await loadFirebase();
+    this.firestore = db;
+    return this.firestore;
+  }
 
   /**
    * Retorna o conjunto completo canônico de dados padrão do FinFlow.
@@ -151,13 +152,18 @@ export class DemoDataService {
   async seed(uid: string, dataset?: FinancialDataset): Promise<void> {
     if (!uid) return;
 
+    const [firestore, { doc, writeBatch }] = await Promise.all([
+      this.getFirestore(),
+      import('firebase/firestore'),
+    ]);
+
     const data = dataset || this.getDefaultDataset();
-    const items: { ref: any; data: any }[] = [];
+    const items: { ref: DocumentReference; data: Record<string, unknown> }[] = [];
 
     // Categorias
     for (const cat of data.categories || DEFAULT_CATEGORIES) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'categories', cat.id),
+        ref: doc(firestore, 'users', uid, 'categories', cat.id),
         data: {
           name: cat.name,
           icon: cat.icon,
@@ -171,7 +177,7 @@ export class DemoDataService {
     // Contas
     for (const acc of data.accounts || INITIAL_ACCOUNTS) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'accounts', acc.id),
+        ref: doc(firestore, 'users', uid, 'accounts', acc.id),
         data: {
           name: acc.name,
           bankName: acc.bankName,
@@ -188,7 +194,7 @@ export class DemoDataService {
     // Cartões de Crédito
     for (const card of data.creditCards || INITIAL_CREDIT_CARDS) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'creditCards', card.id),
+        ref: doc(firestore, 'users', uid, 'creditCards', card.id),
         data: {
           name: card.name,
           bankName: card.bankName,
@@ -205,7 +211,7 @@ export class DemoDataService {
     // Orçamentos
     for (const b of data.budgets || INITIAL_BUDGETS) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'budgets', b.id),
+        ref: doc(firestore, 'users', uid, 'budgets', b.id),
         data: {
           categoryId: b.categoryId,
           month: b.month,
@@ -222,7 +228,7 @@ export class DemoDataService {
       const initial = resolveGoalInitialAmount(g, movements);
       const balance = calculateGoalBalance(initial, movements);
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'goals', g.id),
+        ref: doc(firestore, 'users', uid, 'goals', g.id),
         data: {
           name: g.name,
           targetAmount: g.targetAmount,
@@ -240,7 +246,7 @@ export class DemoDataService {
     // Movimentações de Metas
     for (const mov of targetMovements) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'goalMovements', mov.id),
+        ref: doc(firestore, 'users', uid, 'goalMovements', mov.id),
         data: {
           goalId: mov.goalId,
           type: mov.type,
@@ -256,7 +262,7 @@ export class DemoDataService {
     // Planos de Parcelamento
     for (const p of data.installmentPlans || INITIAL_INSTALLMENT_PLANS) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'installmentPlans', p.id),
+        ref: doc(firestore, 'users', uid, 'installmentPlans', p.id),
         data: {
           description: p.description,
           totalAmount: p.totalAmount,
@@ -277,7 +283,7 @@ export class DemoDataService {
     // Transações
     for (const tx of data.transactions || INITIAL_TRANSACTIONS) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'transactions', tx.id),
+        ref: doc(firestore, 'users', uid, 'transactions', tx.id),
         data: {
           description: tx.description,
           amount: tx.amount,
@@ -302,7 +308,7 @@ export class DemoDataService {
     // Investimentos
     for (const inv of data.investments || INITIAL_INVESTMENTS) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'investments', inv.id),
+        ref: doc(firestore, 'users', uid, 'investments', inv.id),
         data: {
           ticker: inv.ticker,
           name: inv.name,
@@ -326,7 +332,7 @@ export class DemoDataService {
     // Transações de Investimento
     for (const itx of data.investmentTransactions || INITIAL_INVESTMENT_TRANSACTIONS) {
       items.push({
-        ref: doc(this.firestore, 'users', uid, 'investmentTransactions', itx.id),
+        ref: doc(firestore, 'users', uid, 'investmentTransactions', itx.id),
         data: {
           assetId: itx.assetId,
           type: itx.type,
@@ -344,7 +350,7 @@ export class DemoDataService {
     // Persistência em chunks de até 400 operações atômicas
     for (let i = 0; i < items.length; i += 400) {
       const chunk = items.slice(i, i + 400);
-      const batch = writeBatch(this.firestore);
+      const batch = writeBatch(firestore);
       chunk.forEach(item => batch.set(item.ref, item.data));
       await batch.commit();
     }
@@ -385,9 +391,14 @@ export class DemoDataService {
     subcollections: readonly string[],
     filterFn?: (sub: string, docId: string) => boolean
   ): Promise<void> {
+    const [firestore, { collection, getDocs, writeBatch }] = await Promise.all([
+      this.getFirestore(),
+      import('firebase/firestore'),
+    ]);
+
     for (const sub of subcollections) {
       try {
-        const snap = await getDocs(collection(this.firestore, 'users', uid, sub));
+        const snap = await getDocs(collection(firestore, 'users', uid, sub));
         if (snap.empty) continue;
         let docsToDelete = snap.docs;
         if (filterFn) {
@@ -396,7 +407,7 @@ export class DemoDataService {
         if (docsToDelete.length === 0) continue;
         for (let i = 0; i < docsToDelete.length; i += 400) {
           const chunk = docsToDelete.slice(i, i + 400);
-          const batch = writeBatch(this.firestore);
+          const batch = writeBatch(firestore);
           chunk.forEach(d => batch.delete(d.ref));
           await batch.commit();
         }

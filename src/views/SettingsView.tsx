@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSecurity } from '../context/SecurityContext';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
+import { preloadFirebase } from '../firebaseLoader';
 import { CurrencyCode } from '../types/finance';
 import { 
   Lock, 
@@ -58,6 +59,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
 
   const { currentUser, signInWithGoogle, logout, authError } = useAuth();
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!currentUser) {
+      preloadFirebase();
+    }
+  }, [currentUser]);
 
   // Pin state form
   const [showPinSetup, setShowPinSetup] = useState(false);

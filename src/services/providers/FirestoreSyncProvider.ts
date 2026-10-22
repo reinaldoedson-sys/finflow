@@ -1,24 +1,15 @@
-import {
-  Firestore,
-  doc,
-  setDoc,
-  updateDoc,
-  getDocs,
-  collection,
-  query,
-  where,
-} from 'firebase/firestore';
-import { db as defaultDb } from '../../firebase';
+import type { Firestore } from 'firebase/firestore';
+import { loadFirebase } from '../../firebaseLoader';
 import type { SyncEntityName, SyncQueueItem, TombstoneMetadata } from '../syncTypes';
 import type { CloudSyncProvider, CloudSyncResult, CloudPullOptions } from './CloudSyncProvider';
 
 /**
  * Remove valores undefined de objetos recursivamente para evitar erros de validação do Firestore.
  */
-function sanitizePayload(obj: any, isRoot = true): any {
+function sanitizePayload(obj: unknown, isRoot = true): unknown {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-  const clean: any = {};
-  for (const [key, val] of Object.entries(obj)) {
+  const clean: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
     if (isRoot && key === 'id') continue;
     if (val !== undefined) {
       if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
@@ -35,10 +26,11 @@ function sanitizePayload(obj: any, isRoot = true): any {
  * Avalia se um erro retornado pelo Firestore SDK é elegível para retry automático
  * (problemas de rede, indisponibilidade temporária, timeout).
  */
-function isFirestoreRetryableError(error: any): boolean {
-  if (!error) return false;
-  const code = error.code || '';
-  const message = (error.message || '').toLowerCase();
+function isFirestoreRetryableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const errObj = error as { code?: string; message?: string };
+  const code = errObj.code || '';
+  const message = (errObj.message || '').toLowerCase();
 
   if (
     code === 'unavailable' ||
@@ -77,8 +69,15 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
 
   constructor(
     private userId?: string,
-    private firestore: Firestore = defaultDb
+    private firestore?: Firestore
   ) {}
+
+  private async getFirestore(): Promise<Firestore> {
+    if (this.firestore) return this.firestore;
+    const { db } = await loadFirebase();
+    this.firestore = db;
+    return this.firestore;
+  }
 
   setUserId(userId: string | undefined): void {
     this.userId = userId;
@@ -92,7 +91,7 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
    * Envia uma mutação para a nuvem Firestore.
    * Path: users/{uid}/{entityName}/{entityId}
    */
-  async push<T>(item: SyncQueueItem<T>): Promise<CloudSyncResult<T>> {
+  async push(item: SyncQueueItem<unknown>): Promise<CloudSyncResult<unknown>> {
     if (!this.userId) {
       return {
         success: false,
@@ -102,8 +101,13 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
     }
 
     try {
-      const docRef = doc(this.firestore, 'users', this.userId, item.entityName, item.entityId);
-      const cleanData = sanitizePayload(item.payload || {});
+      const [firestore, { doc, setDoc, updateDoc }] = await Promise.all([
+        this.getFirestore(),
+        import('firebase/firestore'),
+      ]);
+
+      const docRef = doc(firestore, 'users', this.userId, item.entityName, item.entityId);
+      const cleanData = sanitizePayload(item.payload || {}) as Record<string, unknown>;
 
       const payloadUpdatedAt =
         item.payload && typeof item.payload === 'object' && 'updatedAt' in item.payload && typeof (item.payload as { updatedAt?: unknown }).updatedAt === 'string'
@@ -125,8 +129,11 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
         // Na atualização, tenta updateDoc; se não existir, fallback para setDoc merge
         try {
           await updateDoc(docRef, payloadToPersist);
-        } catch (updateErr: any) {
-          if (updateErr?.code === 'not-found') {
+        } catch (updateErr: unknown) {
+          const code = (typeof updateErr === 'object' && updateErr !== null && 'code' in updateErr)
+            ? (updateErr as { code?: string }).code
+            : undefined;
+          if (code === 'not-found') {
             await setDoc(docRef, payloadToPersist, { merge: true });
           } else {
             throw updateErr;
@@ -139,8 +146,8 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
         data: item.payload,
         serverRevision: item.revision,
       };
-    } catch (err: any) {
-      const errMsg = err?.message || String(err);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       return {
         success: false,
         error: errMsg,
@@ -159,7 +166,12 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
     }
 
     try {
-      const colRef = collection(this.firestore, 'users', this.userId, entityName);
+      const [firestore, { collection, query, where, getDocs }] = await Promise.all([
+        this.getFirestore(),
+        import('firebase/firestore'),
+      ]);
+
+      const colRef = collection(firestore, 'users', this.userId, entityName);
       let q = query(colRef);
 
       if (options?.sinceRevision !== undefined && options.sinceRevision > 0) {
@@ -189,8 +201,9 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
       }
 
       return results;
-    } catch (err: any) {
-      console.warn(`[FirestoreSyncProvider] Erro ao executar pull de ${entityName}:`, err?.message || err);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[FirestoreSyncProvider] Erro ao executar pull de ${entityName}:`, errMsg);
       return [];
     }
   }
@@ -214,7 +227,12 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
     }
 
     try {
-      const docRef = doc(this.firestore, 'users', this.userId, entityName, entityId);
+      const [firestore, { doc, updateDoc, setDoc }] = await Promise.all([
+        this.getFirestore(),
+        import('firebase/firestore'),
+      ]);
+
+      const docRef = doc(firestore, 'users', this.userId, entityName, entityId);
       const tombstonePayload = {
         deleted: true,
         deletedAt: tombstone.deletedAt || new Date().toISOString(),
@@ -225,8 +243,11 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
       // Tenta updateDoc para registrar o tombstone; se documento não existir, usa setDoc com merge
       try {
         await updateDoc(docRef, tombstonePayload);
-      } catch (err: any) {
-        if (err?.code === 'not-found') {
+      } catch (err: unknown) {
+        const code = (typeof err === 'object' && err !== null && 'code' in err)
+          ? (err as { code?: string }).code
+          : undefined;
+        if (code === 'not-found') {
           await setDoc(docRef, tombstonePayload, { merge: true });
         } else {
           // Se as regras de segurança rejeitarem campos adicionais em updateDoc (ou exigirem doc completo),
@@ -239,8 +260,8 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
         success: true,
         serverRevision: tombstone.tombstoneRevision,
       };
-    } catch (err: any) {
-      const errMsg = err?.message || String(err);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       return {
         success: false,
         error: errMsg,

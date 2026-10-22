@@ -193,8 +193,9 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
         }
       }
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao salvar investimento.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar investimento.';
+      setError(message);
     }
   };
 

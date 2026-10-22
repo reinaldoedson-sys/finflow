@@ -132,7 +132,7 @@ async function runGoalsAndBudgetsMigrationTests() {
 
     // 2.2 Fila de sincronização atualizada com o payload de update
     const queueItem = await queueRepo.getById('goals_goal_carro_novo');
-    assert(queueItem?.payload?.targetAmount === 60000, 'SyncQueue deve conter payload atualizado');
+    assert((queueItem?.payload as any)?.targetAmount === 60000, 'SyncQueue deve conter payload atualizado');
     console.log('  ✅ Goal atualizado no IndexedDB e SyncQueue consolidada.');
 
     // 2.3 Sincroniza update para a nuvem

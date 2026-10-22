@@ -1,17 +1,12 @@
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  getDocs,
+import type {
   QueryDocumentSnapshot,
   DocumentData,
-  onSnapshot,
+  QueryConstraint,
   Unsubscribe,
+  Firestore,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { loadFirebase } from '../firebaseLoader';
+import { createAsyncSubscription } from '../utils/asyncSubscription';
 import type { Transaction } from '../types/finance';
 
 export interface MonthPeriod {
@@ -54,12 +49,18 @@ export async function queryTransactionsPaged(
     startAfterDoc?: QueryDocumentSnapshot<DocumentData> | null;
     startDate?: string;
     endDate?: string;
-  } = {}
+  } = {},
+  dbInstance?: Firestore
 ): Promise<PaginatedTransactionsResult> {
   const { pageSize = 30, startAfterDoc = null, startDate, endDate } = options;
 
-  const baseRef = collection(db, 'users', uid, 'transactions');
-  const constraints: any[] = [];
+  const [firestore, { collection, query, where, orderBy, startAfter, limit, getDocs }] = await Promise.all([
+    dbInstance ? Promise.resolve(dbInstance) : loadFirebase().then(fb => fb.db),
+    import('firebase/firestore'),
+  ]);
+
+  const baseRef = collection(firestore, 'users', uid, 'transactions');
+  const constraints: QueryConstraint[] = [];
 
   if (startDate) {
     constraints.push(where('date', '>=', startDate));
@@ -106,30 +107,55 @@ export function subscribeMonthTransactions(
   uid: string,
   yearMonth: string,
   onUpdate: (transactions: Transaction[]) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  dbInstance?: Firestore,
+  isSubscriptionActive?: () => boolean
 ): Unsubscribe {
-  const { start, end } = getMonthDateRange(yearMonth);
-  const baseRef = collection(db, 'users', uid, 'transactions');
+  return createAsyncSubscription(async (isCancelled) => {
+    try {
+      const [firestore, { collection, query, where, orderBy, onSnapshot }] = await Promise.all([
+        dbInstance ? Promise.resolve(dbInstance) : loadFirebase().then(fb => fb.db),
+        import('firebase/firestore'),
+      ]);
 
-  const q = query(
-    baseRef,
-    where('date', '>=', start),
-    where('date', '<=', end),
-    orderBy('date', 'desc')
-  );
+      if (isCancelled()) return;
+      if (isSubscriptionActive && !isSubscriptionActive()) return;
 
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const list: Transaction[] = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Transaction, 'id'>),
-      }));
-      onUpdate(list);
-    },
-    (err) => {
-      console.warn(`[FinFlow Firestore] Erro no listener mensal de transações (${yearMonth}):`, err);
-      if (onError) onError(err);
+      const { start, end } = getMonthDateRange(yearMonth);
+      const baseRef = collection(firestore, 'users', uid, 'transactions');
+
+      const q = query(
+        baseRef,
+        where('date', '>=', start),
+        where('date', '<=', end),
+        orderBy('date', 'desc')
+      );
+
+      const unsub = onSnapshot(
+        q,
+        (snapshot) => {
+          if (isCancelled()) return;
+          if (isSubscriptionActive && !isSubscriptionActive()) return;
+
+          const list: Transaction[] = snapshot.docs.map(docSnap => ({
+            id: docSnap.id,
+            ...(docSnap.data() as Omit<Transaction, 'id'>),
+          }));
+          onUpdate(list);
+        },
+        (err) => {
+          if (isCancelled()) return;
+          console.warn(`[FinFlow Firestore] Erro no listener mensal de transações (${yearMonth}):`, err);
+          if (onError) onError(err);
+        }
+      );
+
+      return unsub;
+    } catch (err: unknown) {
+      if (!isCancelled()) {
+        console.warn('[FinFlow Firestore] Falha ao inicializar listener de transações:', err);
+        if (onError && err instanceof Error) onError(err);
+      }
     }
-  );
+  });
 }

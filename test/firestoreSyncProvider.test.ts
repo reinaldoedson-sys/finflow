@@ -62,7 +62,7 @@ async function runFirestoreSyncProviderTests() {
     // Testamos a execução de push real com mock interceptado
     mockProvider.push = async (item) => {
       savedDocs[`users/user_test_456/${item.entityName}/${item.entityId}`] = {
-        ...item.payload,
+        ...(item.payload as Record<string, unknown>),
         userId: 'user_test_456',
         revision: item.revision,
       };

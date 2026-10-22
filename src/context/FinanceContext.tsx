@@ -29,7 +29,7 @@ import { getCurrentMonth, getPreviousMonth, getNextMonth } from '../utils/curren
 import { backupService } from '../services/backupService';
 import { demoDataService } from '../services/demoDataService';
 import { useAuth } from './AuthContext';
-import { db } from '../firebase';
+import { loadFirebase } from '../firebaseLoader';
 import {
   isIndexedDBAvailable,
   migrateFromLocalStorageIfAvailable,
@@ -52,11 +52,6 @@ import { SyncQueue } from '../services/syncQueue';
 import { ConflictResolver } from '../services/conflictResolver';
 import { FinancialSyncService } from '../services/financialSyncService';
 import { FirestoreSyncProvider } from '../services/providers/FirestoreSyncProvider';
-import { 
-  doc, 
-  setDoc, 
-  deleteDoc,
-} from 'firebase/firestore';
 import { useFirestoreSync } from '../hooks/useFirestoreSync';
 import {
   TransactionApplicationService,
@@ -222,10 +217,10 @@ const DEMO_CLEARED_KEY = STORAGE_KEY_PREFIX + 'demo_cleared';
  * Remove valores undefined de objetos para evitar erros no Firestore
  * ("Function setDoc() called with invalid data. Unsupported field value: undefined").
  */
-const sanitizePayload = (obj: any, isRoot = true): any => {
+const sanitizePayload = (obj: unknown, isRoot = true): unknown => {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-  const clean: any = {};
-  for (const [key, val] of Object.entries(obj)) {
+  const clean: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
     if (isRoot && key === 'id') continue;
     if (val !== undefined) {
       if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
@@ -556,13 +551,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     let remaining = [...currentQueue];
     let allSucceeded = true;
 
+    const [fb, { doc, setDoc, deleteDoc }] = await Promise.all([
+      loadFirebase(),
+      import('firebase/firestore'),
+    ]);
+
     for (const op of currentQueue) {
       try {
-        const docRef = doc(db, 'users', currentUser.uid, op.collection, op.docId);
+        const docRef = doc(fb.db, 'users', currentUser.uid, op.collection, op.docId);
         const payloadWithUser = op.payload
           ? { ...op.payload, userId: currentUser.uid }
           : op.payload;
-        const clean = sanitizePayload(payloadWithUser);
+        const clean = sanitizePayload(payloadWithUser) as Record<string, unknown>;
 
         if (op.type === 'set') {
           await setDoc(docRef, clean);
@@ -730,7 +730,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         if (derived && derived.hasLedger) {
           const div = compareAssetWithLedger(asset, derived);
           if (div.hasDivergence) {
-            console.info(
+            console.warn(
               `[FinFlow Ledger Audit] Divergência detectada no ativo ${asset.ticker || asset.id}: ` +
               `Armazenado (Qtd: ${div.storedQuantity}, PM: ${div.storedAveragePrice}) vs ` +
               `Ledger (Qtd: ${div.derivedQuantity}, PM: ${div.derivedAveragePrice})`
@@ -925,7 +925,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const linkedPlans = installmentPlans.filter(p => p.creditCardId === id);
 
     if (linkedTransactions.length > 0 || linkedPlans.length > 0) {
-      console.info(
+      console.warn(
         `[FinFlow CreditCard] Cartão ${id} possui histórico financeiro vinculado ` +
         `(${linkedTransactions.length} transações, ${linkedPlans.length} parcelamentos). ` +
         `Preservando registros históricos com exclusão lógica via tombstone.`
@@ -1216,17 +1216,20 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
             financialSyncService.updateInvestmentMarketQuote(inv.id, q.price, quoteMetadata).catch(console.warn);
 
             if (currentUser) {
-              const invDocRef = doc(db, 'users', currentUser.uid, 'investments', inv.id);
-              setDoc(invDocRef, {
-                userId: currentUser.uid,
-                currentPrice: q.price,
-                ...(q.previousClose !== undefined ? { previousClose: q.previousClose } : {}),
-                ...(q.changePercent !== undefined ? { changePercent: q.changePercent } : {}),
-                lastPriceUpdate: quoteMetadata.lastPriceUpdate,
-                updatedAt: quoteMetadata.lastPriceUpdate,
-              }, { merge: true }).catch(err => {
-                console.warn('[FinanceContext] Erro ao sincronizar cotação no Firestore:', err);
-              });
+              loadFirebase().then(async (fb) => {
+                const { doc, setDoc } = await import('firebase/firestore');
+                const invDocRef = doc(fb.db, 'users', currentUser.uid, 'investments', inv.id);
+                setDoc(invDocRef, {
+                  userId: currentUser.uid,
+                  currentPrice: q.price,
+                  ...(q.previousClose !== undefined ? { previousClose: q.previousClose } : {}),
+                  ...(q.changePercent !== undefined ? { changePercent: q.changePercent } : {}),
+                  lastPriceUpdate: quoteMetadata.lastPriceUpdate,
+                  updatedAt: quoteMetadata.lastPriceUpdate,
+                }, { merge: true }).catch(err => {
+                  console.warn('[FinanceContext] Erro ao sincronizar cotação no Firestore:', err);
+                });
+              }).catch(console.warn);
             }
           }
         }

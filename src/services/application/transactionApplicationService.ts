@@ -2,8 +2,8 @@ import { generateId } from '../../domain/id';
 import type { FinancialSyncService } from '../financialSyncService';
 import type { Transaction } from '../../types/finance';
 
-export interface CreateTransactionDTO extends Omit<Transaction, 'id' | 'createdAt'> {}
-export interface UpdateTransactionDTO extends Partial<Transaction> {}
+export type CreateTransactionDTO = Omit<Transaction, 'id' | 'createdAt'>;
+export type UpdateTransactionDTO = Partial<Transaction>;
 
 /**
  * Application Service responsável pelos casos de uso de Transações:

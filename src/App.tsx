@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { SecurityProvider } from './context/SecurityContext';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
@@ -17,15 +17,24 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { MobileBottomNav } from './components/MobileBottomNav';
 
 import { DashboardView } from './views/DashboardView';
-import { TransactionsView } from './views/TransactionsView';
-import { AccountsView } from './views/AccountsView';
-import { InvestmentsView } from './views/InvestmentsView';
-import { PortfolioMonitoringView } from './views/PortfolioMonitoringView';
-import { BudgetsView } from './views/BudgetsView';
-import { GoalsView } from './views/GoalsView';
-import { InstallmentsView } from './views/InstallmentsView';
-import { ReportsView } from './views/ReportsView';
-import { SettingsView } from './views/SettingsView';
+const TransactionsView = lazy(() => import('./views/TransactionsView').then(m => ({ default: m.TransactionsView })));
+const AccountsView = lazy(() => import('./views/AccountsView').then(m => ({ default: m.AccountsView })));
+const InvestmentsView = lazy(() => import('./views/InvestmentsView').then(m => ({ default: m.InvestmentsView })));
+const PortfolioMonitoringView = lazy(() => import('./views/PortfolioMonitoringView').then(m => ({ default: m.PortfolioMonitoringView })));
+const BudgetsView = lazy(() => import('./views/BudgetsView').then(m => ({ default: m.BudgetsView })));
+const GoalsView = lazy(() => import('./views/GoalsView').then(m => ({ default: m.GoalsView })));
+const InstallmentsView = lazy(() => import('./views/InstallmentsView').then(m => ({ default: m.InstallmentsView })));
+const ReportsView = lazy(() => import('./views/ReportsView').then(m => ({ default: m.ReportsView })));
+const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
+
+const ViewLoadingFallback: React.FC = () => (
+  <div className="flex items-center justify-center min-h-[40vh] py-16 animate-in fade-in duration-150">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-8 h-8 rounded-full border-2 border-slate-800 border-t-emerald-500 animate-spin" />
+      <span className="text-xs text-slate-400 font-medium tracking-wide">Carregando...</span>
+    </div>
+  </div>
+);
 
 import { Transaction, Account, CreditCard, FinancialGoal, InvestmentAsset } from './types/finance';
 import { ShieldCheck } from 'lucide-react';
@@ -166,78 +175,80 @@ const FinFlowApp: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-24 md:pb-6">
         <UpdateBanner />
         <PWAInstallBanner />
-        {currentTab === 'dashboard' && (
-          <DashboardView
-            onOpenNewTransaction={handleOpenNewTransaction}
-            onOpenAccountModal={handleOpenNewAccount}
-            onOpenBudgetModal={handleOpenBudgetModal}
-            onOpenDepositModal={handleOpenDepositModal}
-            onSelectTransactionToEdit={handleEditTransaction}
-            onNavigateToTab={setCurrentTab}
-          />
-        )}
+        <Suspense fallback={<ViewLoadingFallback />}>
+          {currentTab === 'dashboard' && (
+            <DashboardView
+              onOpenNewTransaction={handleOpenNewTransaction}
+              onOpenAccountModal={handleOpenNewAccount}
+              onOpenBudgetModal={handleOpenBudgetModal}
+              onOpenDepositModal={handleOpenDepositModal}
+              onSelectTransactionToEdit={handleEditTransaction}
+              onNavigateToTab={setCurrentTab}
+            />
+          )}
 
-        {currentTab === 'transactions' && (
-          <TransactionsView
-            onOpenNewTransaction={handleOpenNewTransaction}
-            onEditTransaction={handleEditTransaction}
-          />
-        )}
+          {currentTab === 'transactions' && (
+            <TransactionsView
+              onOpenNewTransaction={handleOpenNewTransaction}
+              onEditTransaction={handleEditTransaction}
+            />
+          )}
 
-        {currentTab === 'accounts' && (
-          <AccountsView
-            onOpenNewAccount={handleOpenNewAccount}
-            onOpenNewCreditCard={handleOpenNewCreditCard}
-            onEditAccount={handleEditAccount}
-            onEditCreditCard={handleEditCreditCard}
-          />
-        )}
+          {currentTab === 'accounts' && (
+            <AccountsView
+              onOpenNewAccount={handleOpenNewAccount}
+              onOpenNewCreditCard={handleOpenNewCreditCard}
+              onEditAccount={handleEditAccount}
+              onEditCreditCard={handleEditCreditCard}
+            />
+          )}
 
-        {currentTab === 'portfolio' && (
-          <PortfolioMonitoringView
-            onOpenNewInvestment={handleOpenNewInvestment}
-            onEditInvestment={handleEditInvestment}
-            onNavigateToInvestments={() => setCurrentTab('investments')}
-          />
-        )}
+          {currentTab === 'portfolio' && (
+            <PortfolioMonitoringView
+              onOpenNewInvestment={handleOpenNewInvestment}
+              onEditInvestment={handleEditInvestment}
+              onNavigateToInvestments={() => setCurrentTab('investments')}
+            />
+          )}
 
-        {currentTab === 'investments' && (
-          <InvestmentsView
-            onOpenNewInvestment={handleOpenNewInvestment}
-            onEditInvestment={handleEditInvestment}
-            onNavigateToPortfolio={() => setCurrentTab('portfolio')}
-          />
-        )}
+          {currentTab === 'investments' && (
+            <InvestmentsView
+              onOpenNewInvestment={handleOpenNewInvestment}
+              onEditInvestment={handleEditInvestment}
+              onNavigateToPortfolio={() => setCurrentTab('portfolio')}
+            />
+          )}
 
-        {currentTab === 'installments' && (
-          <InstallmentsView
-            onOpenNewInstallment={() => setIsInstallmentModalOpen(true)}
-          />
-        )}
+          {currentTab === 'installments' && (
+            <InstallmentsView
+              onOpenNewInstallment={() => setIsInstallmentModalOpen(true)}
+            />
+          )}
 
-        {currentTab === 'budgets' && (
-          <BudgetsView
-            onOpenBudgetModal={handleOpenBudgetModal}
-          />
-        )}
+          {currentTab === 'budgets' && (
+            <BudgetsView
+              onOpenBudgetModal={handleOpenBudgetModal}
+            />
+          )}
 
-        {currentTab === 'goals' && (
-          <GoalsView
-            onOpenNewGoal={handleOpenNewGoal}
-            onEditGoal={handleEditGoal}
-            onOpenDepositModal={handleOpenDepositModal}
-          />
-        )}
+          {currentTab === 'goals' && (
+            <GoalsView
+              onOpenNewGoal={handleOpenNewGoal}
+              onEditGoal={handleEditGoal}
+              onOpenDepositModal={handleOpenDepositModal}
+            />
+          )}
 
-        {currentTab === 'reports' && (
-          <ReportsView />
-        )}
+          {currentTab === 'reports' && (
+            <ReportsView />
+          )}
 
-        {currentTab === 'settings' && (
-          <SettingsView
-            onOpenBackupModal={() => setIsBackupModalOpen(true)}
-          />
-        )}
+          {currentTab === 'settings' && (
+            <SettingsView
+              onOpenBackupModal={() => setIsBackupModalOpen(true)}
+            />
+          )}
+        </Suspense>
       </main>
 
       {/* Footer */}

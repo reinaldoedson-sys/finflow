@@ -1,6 +1,6 @@
 import type { SyncEntityName, SyncQueueItem, TombstoneMetadata } from '../syncTypes';
 
-export interface CloudSyncResult<T = any> {
+export interface CloudSyncResult<T = unknown> {
   success: boolean;
   data?: T;
   serverRevision?: number;
@@ -21,7 +21,7 @@ export interface CloudSyncProvider {
   readonly name: string;
 
   /** Envia uma mutação para a nuvem */
-  push<T>(item: SyncQueueItem<T>): Promise<CloudSyncResult<T>>;
+  push(item: SyncQueueItem<unknown>): Promise<CloudSyncResult<unknown>>;
 
   /** Baixa alterações remotas de uma determinada entidade */
   pull<T>(entityName: SyncEntityName, options?: CloudPullOptions): Promise<T[]>;

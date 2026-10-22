@@ -41,7 +41,7 @@ export interface TombstoneMetadata {
 /**
  * Item atômico da fila de sincronização com controle de idempotência e concorrência otimista.
  */
-export interface SyncQueueItem<T = any> {
+export interface SyncQueueItem<T = unknown> {
   /** Chave estável no formato `${entityName}_${entityId}` */
   id: string;
   /** Identificador único e idempotente da operação financeira */

@@ -110,17 +110,17 @@ export class BackupService {
         return { success: false, message: 'Conteúdo de backup inválido ou vazio.' };
       }
 
-      let parsed: any;
+      let parsed: Record<string, unknown>;
       try {
-        parsed = JSON.parse(content);
+        parsed = JSON.parse(content) as Record<string, unknown>;
       } catch {
         return { success: false, message: 'Arquivo corrompido: formato JSON inválido.' };
       }
 
-      let payload = parsed;
+      let payload: Record<string, unknown> = parsed;
 
       // Tratamento de arquivo criptografado
-      if (parsed.isEncrypted && parsed.cipherText) {
+      if (parsed.isEncrypted && typeof parsed.cipherText === 'string') {
         if (!passphrase || passphrase.trim().length === 0) {
           return {
             success: false,
@@ -130,7 +130,7 @@ export class BackupService {
 
         try {
           const decryptedJson = await decryptData(parsed.cipherText, passphrase.trim());
-          payload = JSON.parse(decryptedJson);
+          payload = JSON.parse(decryptedJson) as Record<string, unknown>;
         } catch {
           return {
             success: false,
@@ -182,7 +182,7 @@ export class BackupService {
           investmentTransactions: Array.isArray(payload.investmentTransactions)
             ? payload.investmentTransactions
             : undefined,
-          currency: payload.currency,
+          currency: typeof payload.currency === 'string' ? (payload.currency as CurrencyCode) : undefined,
         },
       };
     } catch (err: unknown) {
