@@ -79,10 +79,12 @@ O FinFlow opera com arquitetura local-first e isolamento de dados entre contas n
 - **Registro do dono local (`finflow_local_owner`):** O navegador registra no `localStorage` a chave `finflow_local_owner` com o UID da conta à qual os dados locais pertencem.
 - **Entrada com outra conta:** Ao fazer login com uma conta Google diferente da registrada no aparelho, o app não sincroniza nada com a nuvem e exibe um modal de segurança com três opções:
   - **"Baixar backup antes":** Abre o modal de backup para exportar e baixar os dados locais antes de qualquer alteração;
-  - **"Continuar e apagar dados locais":** Limpa o IndexedDB financeiro, a fila de sincronização e as chaves de dados do `localStorage`, registra o UID da nova conta como proprietário e recarrega a página;
+  - **"Continuar e apagar dados locais":** Limpa o IndexedDB financeiro, a fila de sincronização e as chaves de dados do `localStorage`, além de apagar a configuração de segurança (PIN e bloqueio progressivo do aparelho, permitindo que o usuário configure um novo PIN depois), registra o UID da nova conta como proprietário e recarrega a página;
   - **"Cancelar e sair":** Desconecta a nova conta imediatamente sem tocar nos dados locais pré-existentes.
 - **Fila de sincronização protegida:** Itens pendentes na fila guardam o `ownerUid` e só são enviados para a conta que os criou. Operações de outra conta permanecem retidas e não são enviadas nem removidas.
-- **Logout:** O logout encerra a sessão remota, mas **NÃO apaga os dados locais** armazenados no IndexedDB do aparelho.
+- **Logout comum vs. Sair e apagar dados:**
+  - **Logout comum ("Desconectar"):** Encerra a sessão remota no Firebase, mas **NÃO apaga os dados locais** armazenados no IndexedDB do aparelho, mantendo suas informações disponíveis offline no dispositivo;
+  - **"Sair e apagar dados deste aparelho":** Disponível em Configurações para usuários autenticados, desconecta a conta e remove por completo os dados financeiros locais, a fila de sincronização, o PIN e o registro do dono no aparelho (os dados já sincronizados continuam preservados na nuvem). Se houver itens pendentes de sincronização ainda não enviados, o aplicativo alerta que eles serão perdidos antes de confirmar.
 
 ---
 

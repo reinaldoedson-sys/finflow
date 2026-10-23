@@ -19,7 +19,9 @@ import {
   CheckCircle2, 
   Smartphone, 
   Sparkles, 
-  ExternalLink
+  ExternalLink,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 
 interface NavigatorWithStandalone extends Navigator {
@@ -54,11 +56,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
     syncStatus: globalSyncStatus,
     syncError,
     pendingSyncCount,
-    retrySync
+    retrySync,
+    signOutAndWipeDevice
   } = useFinance();
 
   const { currentUser, signInWithGoogle, logout, authError } = useAuth();
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  // Wipe device confirmation modal state
+  const [showWipeModal, setShowWipeModal] = useState(false);
+  const [isWiping, setIsWiping] = useState(false);
+
+  const handleConfirmWipe = async () => {
+    setIsWiping(true);
+    try {
+      await signOutAndWipeDevice();
+    } catch (err) {
+      console.error('Erro ao sair e apagar dados deste aparelho:', err);
+      setIsWiping(false);
+    }
+  };
 
   useEffect(() => {
     if (!currentUser) {
@@ -223,11 +240,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleSyncToCloud}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Sincronizar Agora</span>
@@ -235,13 +252,92 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
                 <button
                   type="button"
                   onClick={logout}
-                  className="px-3 py-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Desconectar</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowWipeModal(true)}
+                  className="px-3 py-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Remove todos os dados e o PIN deste aparelho e encerra a sessão"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Sair e apagar dados deste aparelho</span>
+                </button>
               </div>
             </div>
+
+            {/* Wipe Device Confirmation Modal */}
+            {showWipeModal && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="bg-[#0f172a] border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                  <div className="p-6">
+                    <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
+                      <Trash2 className="w-6 h-6" />
+                    </div>
+
+                    <h3 className="text-lg font-bold text-slate-100 mb-2">
+                      Sair e apagar dados deste aparelho?
+                    </h3>
+
+                    <p className="text-sm text-slate-300 leading-relaxed mb-4">
+                      Isso remove todos os dados financeiros e o PIN deste aparelho. Os dados já sincronizados continuam na nuvem da sua conta.
+                    </p>
+
+                    {pendingSyncCount > 0 && (
+                      <div className="bg-rose-950/30 border border-rose-800/40 rounded-xl p-3 mb-6 flex items-start gap-2.5">
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                        <div className="text-xs text-rose-300 leading-relaxed">
+                          <strong>Atenção:</strong> Existem <strong className="font-semibold">{pendingSyncCount}</strong> {pendingSyncCount === 1 ? 'item pendente' : 'itens pendentes'} de sincronização que <strong>SERÃO PERDIDOS</strong> se você continuar sem sincronizar antes.
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2.5">
+                      <button
+                        type="button"
+                        onClick={() => onOpenBackupModal()}
+                        disabled={isWiping}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-700/80 text-slate-200 text-sm font-semibold rounded-xl border border-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <Download className="w-4 h-4 text-emerald-400" />
+                        <span>Baixar backup antes</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleConfirmWipe}
+                        disabled={isWiping}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-rose-950/40 cursor-pointer disabled:opacity-50"
+                      >
+                        {isWiping ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Apagando e desconectando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4" />
+                            <span>Sair e apagar</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowWipeModal(false)}
+                        disabled={isWiping}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-400 hover:text-slate-200 text-xs font-medium rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <span>Cancelar</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Seus lançamentos, contas e orçamentos estão sendo salvos com isolamento total no banco de dados Firestore sob sua identidade protegida.

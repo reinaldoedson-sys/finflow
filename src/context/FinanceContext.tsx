@@ -59,6 +59,8 @@ import {
   canPushItem,
   getStoredLocalOwner,
   setStoredLocalOwner,
+  getLocalStorageKeysToClearOnAccountSwitch,
+  getLocalStorageKeysToClearOnWipe,
 } from '../domain/localOwnership';
 import {
   TransactionApplicationService,
@@ -217,6 +219,7 @@ interface FinanceContextType {
   isOwnershipConflict: boolean;
   confirmClearAndSwitchAccount: () => Promise<void>;
   cancelConflictLogout: () => Promise<void>;
+  signOutAndWipeDevice: () => Promise<void>;
 }
 
 const STORAGE_KEY_PREFIX = 'finflow_app_';
@@ -491,6 +494,32 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [pendingQueue, setPendingQueue] = useState<PendingSyncOperation[]>(() =>
     loadPendingQueueFromStorage()
   );
+  const [dexieQueueCount, setDexieQueueCount] = useState<number>(0);
+
+  // Monitora alterações na fila persistente Dexie
+  useEffect(() => {
+    let isMounted = true;
+    const updateDexieCount = async () => {
+      if (isIndexedDBAvailable()) {
+        try {
+          const count = await db.syncQueue.count();
+          if (isMounted) setDexieQueueCount(count);
+        } catch {
+          // ignore
+        }
+      }
+    };
+    updateDexieCount();
+    const unsubscribe = financialSyncService.subscribe(() => {
+      updateDexieCount();
+    });
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [financialSyncService]);
+
+  const totalPendingSyncCount = pendingQueue.length + dexieQueueCount;
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(() => {
     const queue = loadPendingQueueFromStorage();
     return queue.length > 0 ? 'pending' : 'synced';
@@ -503,7 +532,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     savePendingQueueToStorage(pendingQueue);
   }, [pendingQueue]);
 
-  const isCloudSynced = !!effectiveUserId && syncStatus === 'synced' && pendingQueue.length === 0;
+  const isCloudSynced = !!effectiveUserId && syncStatus === 'synced' && totalPendingSyncCount === 0;
 
   // Local storage backups for offline support
   useEffect(() => {
@@ -1651,32 +1680,32 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await logout();
   }, [logout]);
 
+  const wipeLocalFinancialStorage = async (keysToRemove: string[]) => {
+    // 1. Limpa IndexedDB financeiro e fila de sincronização
+    await clearAllFinancialEntities();
+    if (isIndexedDBAvailable()) {
+      await db.syncQueue.clear();
+    }
+
+    // 2. Limpa localStorage das chaves selecionadas e zera fila pendente legada
+    for (const k of keysToRemove) {
+      try {
+        localStorage.removeItem(k);
+      } catch (err) {
+        console.warn(`[FinanceContext] Falha ao remover chave "${k}" do localStorage:`, err);
+      }
+    }
+    savePendingQueueToStorage([]);
+  };
+
   const confirmClearAndSwitchAccount = useCallback(async () => {
     if (!currentUser?.uid) return;
     const newUid = currentUser.uid;
 
     try {
-      // 1. Limpa IndexedDB financeiro e fila de sincronização
-      await clearAllFinancialEntities();
-      if (isIndexedDBAvailable()) {
-        await db.syncQueue.clear();
-      }
-
-      // 2. Limpa localStorage das chaves do app e fila legada
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith(STORAGE_KEY_PREFIX) || key === 'finflow_pending_queue')) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach(k => localStorage.removeItem(k));
-      savePendingQueueToStorage([]);
-
-      // 3. Grava o novo uid como dono
+      const keysToRemove = getLocalStorageKeysToClearOnAccountSwitch(Object.keys(localStorage));
+      await wipeLocalFinancialStorage(keysToRemove);
       setStoredLocalOwner(newUid);
-
-      // 4. Recarrega a página para reiniciar o estado em memória com segurança
       window.location.reload();
     } catch (err) {
       console.error('[FinanceContext] Erro ao limpar dados locais para troca de conta:', err);
@@ -1684,6 +1713,20 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       window.location.reload();
     }
   }, [currentUser]);
+
+  const signOutAndWipeDevice = useCallback(async () => {
+    try {
+      await logout();
+      const keysToRemove = getLocalStorageKeysToClearOnWipe(Object.keys(localStorage));
+      await wipeLocalFinancialStorage(keysToRemove);
+      window.location.reload();
+    } catch (err) {
+      console.error('[FinanceContext] Erro ao sair e apagar dados deste aparelho:', err);
+      const keysToRemove = getLocalStorageKeysToClearOnWipe(Object.keys(localStorage));
+      await wipeLocalFinancialStorage(keysToRemove);
+      window.location.reload();
+    }
+  }, [logout]);
 
   return (
     <FinanceContext.Provider
@@ -1706,7 +1749,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         isCloudSynced,
         syncStatus,
         syncError,
-        pendingSyncCount: pendingQueue.length,
+        pendingSyncCount: totalPendingSyncCount,
         retrySync,
         isDemoActive,
         clearSampleData,
@@ -1760,7 +1803,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         clearAllData,
         isOwnershipConflict: ownershipConflict,
         confirmClearAndSwitchAccount,
-        cancelConflictLogout
+        cancelConflictLogout,
+        signOutAndWipeDevice
       }}
     >
       {children}
