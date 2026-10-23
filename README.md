@@ -68,7 +68,21 @@ npm run preview
 As variáveis configuráveis no arquivo `.env` (baseado no `.env.example`) são:
 
 - `VITE_QUOTES_API_URL`: URL base para a API de cotações de mercado (opcional). Se não for definida, o cliente utiliza por padrão o endpoint local `/api/quotes`.
-- `APP_URL`: URL onde a aplicação está hospedada (gerenciada e injetada pelo ambiente de hospedagem/Cloud Run em tempo de execução para callbacks e referências).
+
+---
+
+## 👥 Contas e Dados Locais
+
+O FinFlow opera com arquitetura local-first e isolamento de dados entre contas no mesmo dispositivo:
+
+- **Dados criados sem login:** Lançamentos e configurações criados localmente antes de qualquer autenticação sobem automaticamente para a primeira conta Google que fizer login no aparelho.
+- **Registro do dono local (`finflow_local_owner`):** O navegador registra no `localStorage` a chave `finflow_local_owner` com o UID da conta à qual os dados locais pertencem.
+- **Entrada com outra conta:** Ao fazer login com uma conta Google diferente da registrada no aparelho, o app não sincroniza nada com a nuvem e exibe um modal de segurança com três opções:
+  - **"Baixar backup antes":** Abre o modal de backup para exportar e baixar os dados locais antes de qualquer alteração;
+  - **"Continuar e apagar dados locais":** Limpa o IndexedDB financeiro, a fila de sincronização e as chaves de dados do `localStorage`, registra o UID da nova conta como proprietário e recarrega a página;
+  - **"Cancelar e sair":** Desconecta a nova conta imediatamente sem tocar nos dados locais pré-existentes.
+- **Fila de sincronização protegida:** Itens pendentes na fila guardam o `ownerUid` e só são enviados para a conta que os criou. Operações de outra conta permanecem retidas e não são enviadas nem removidas.
+- **Logout:** O logout encerra a sessão remota, mas **NÃO apaga os dados locais** armazenados no IndexedDB do aparelho.
 
 ---
 

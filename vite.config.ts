@@ -62,7 +62,7 @@ export default defineConfig(() => {
           id: '/',
           name: 'FinFlow - Gestão Financeira',
           short_name: 'FinFlow',
-          description: 'Aplicativo de gestão de finanças pessoais com alta segurança, controle de despesas e sincronização em nuvem.',
+          description: 'Controle de finanças pessoais com dados locais e sincronização opcional',
           theme_color: '#0b0f17',
           background_color: '#0b0f17',
           display: 'standalone',

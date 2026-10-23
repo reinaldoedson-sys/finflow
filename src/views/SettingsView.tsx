@@ -151,7 +151,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           Segurança, Privacidade & Configurações
         </h2>
         <p className="text-xs text-slate-400 mt-0.5">
-          Gerencie a proteção por PIN, cofre criptografado local e preferências do sistema
+          Gerencie a proteção por PIN, backups e preferências do sistema
         </p>
       </div>
 
@@ -571,7 +571,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
             <FolderLock className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Cofre de Dados & Backup Criptografado</h3>
+            <h3 className="text-sm font-bold text-white">Armazenamento Local & Backup</h3>
             <p className="text-xs text-slate-400">
               Todos os dados ficam armazenados localmente no seu dispositivo, com suporte a exportação AES-256
             </p>
@@ -582,7 +582,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           <div>
             <p className="text-xs font-semibold text-slate-200">Backup Local com Senha</p>
             <p className="text-[11px] text-slate-400">
-              Gere um arquivo protegido para salvar no seu computador ou pen drive com segurança máxima.
+              Gere um arquivo protegido por senha para salvar no seu computador ou pen drive.
             </p>
           </div>
           <button

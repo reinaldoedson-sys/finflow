@@ -1,6 +1,6 @@
 {
   "name": "FinFlow - Gestão Financeira Simples e Segura",
-  "description": "Aplicativo de gestão de finanças pessoais com foco em simplicidade, alta segurança, privacidade local e controle completo de despesas e metas.",
+  "description": "Controle de finanças pessoais com dados locais, bloqueio por PIN e sincronização opcional.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

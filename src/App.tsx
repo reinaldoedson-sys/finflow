@@ -263,12 +263,12 @@ const FinFlowApp: React.FC = () => {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span className="font-semibold text-slate-400">FinFlow</span>
-            <span>· Gestão Financeira Pessoal com Simplicidade & Segurança Máxima</span>
+            <span>· Gestão Financeira Pessoal com Dados Locais e Sincronização Opcional</span>
           </div>
           <div className="flex items-center gap-4 text-slate-500 text-[11px]">
             <span>100% Local no Navegador</span>
             <span>·</span>
-            <span>Criptografia AES-256</span>
+            <span>Bloqueio por PIN</span>
             <span>·</span>
             <span>Zero Rastreamento</span>
           </div>

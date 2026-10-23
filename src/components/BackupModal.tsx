@@ -92,7 +92,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
             </div>
             <div>
               <h3 className="text-base font-bold text-white tracking-tight">
-                Cofre & Backup Local Seguro
+                Backup e Restauração
               </h3>
               <p className="text-[11px] text-slate-400">Privacidade total · Sem servidores externos</p>
             </div>
@@ -151,7 +151,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
         {tab === 'export' ? (
           <div className="space-y-4">
             <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-3.5 text-xs text-slate-300">
-              <p className="font-semibold text-slate-200 mb-1">Criptografia de Ponta a Ponta</p>
+              <p className="font-semibold text-slate-200 mb-1">Proteção por Senha (AES-GCM)</p>
               <p className="text-slate-400 leading-relaxed">
                 Seus lançamentos, contas e orçamentos podem ser salvos em um arquivo protegido por criptografia 
                 <strong className="text-emerald-400 font-mono"> AES-GCM 256-bit</strong>. Ninguém conseguirá abrir o arquivo sem a senha escolhida por você.
@@ -167,7 +167,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
                 className="w-4 h-4 rounded accent-emerald-500 border-slate-700 bg-slate-900"
               />
               <label htmlFor="encryptExport" className="text-xs text-slate-200 font-medium cursor-pointer">
-                Proteger arquivo com senha (Criptografia Forte)
+                Proteger arquivo com senha (AES-GCM 256)
               </label>
             </div>
 
