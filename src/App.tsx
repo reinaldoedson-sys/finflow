@@ -10,6 +10,7 @@ import { GoalModal } from './components/GoalModal';
 import { GoalDepositModal } from './components/GoalDepositModal';
 import { BudgetModal } from './components/BudgetModal';
 import { BackupModal } from './components/BackupModal';
+import { AccountConflictModal } from './components/AccountConflictModal';
 import { InstallmentModal } from './components/InstallmentModal';
 import { InvestmentModal } from './components/InvestmentModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
@@ -40,7 +41,12 @@ import { Transaction, Account, CreditCard, FinancialGoal, InvestmentAsset } from
 import { ShieldCheck } from 'lucide-react';
 
 const FinFlowApp: React.FC = () => {
-  const { goals } = useFinance();
+  const {
+    goals,
+    isOwnershipConflict,
+    confirmClearAndSwitchAccount,
+    cancelConflictLogout
+  } = useFinance();
 
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
 
@@ -326,6 +332,13 @@ const FinFlowApp: React.FC = () => {
       <BackupModal
         isOpen={isBackupModalOpen}
         onClose={() => setIsBackupModalOpen(false)}
+      />
+
+      <AccountConflictModal
+        isOpen={isOwnershipConflict}
+        onOpenBackup={() => setIsBackupModalOpen(true)}
+        onConfirmClearAndSwitch={confirmClearAndSwitchAccount}
+        onCancelLogout={cancelConflictLogout}
       />
     </div>
   );

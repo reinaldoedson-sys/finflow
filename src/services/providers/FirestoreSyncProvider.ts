@@ -1,5 +1,6 @@
 import type { Firestore } from 'firebase/firestore';
 import { loadFirebase } from '../../firebaseLoader';
+import { canPushItem } from '../../domain/localOwnership';
 import type { SyncEntityName, SyncQueueItem, TombstoneMetadata } from '../syncTypes';
 import type { CloudSyncProvider, CloudSyncResult, CloudPullOptions } from './CloudSyncProvider';
 
@@ -97,6 +98,14 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
         success: false,
         error: 'Usuário não autenticado no Firestore',
         isRetryable: true,
+      };
+    }
+
+    if (!canPushItem(item.ownerUid, this.userId)) {
+      return {
+        success: false,
+        error: `Item com ownerUid "${item.ownerUid}" não pode ser enviado para a conta "${this.userId}"`,
+        isRetryable: false,
       };
     }
 

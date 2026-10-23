@@ -64,6 +64,8 @@ export interface SyncQueueItem<T = unknown> {
   tombstone?: TombstoneMetadata;
   /** Dependências causais obrigatórias: itens filhos só despacham após a conclusão dos pais */
   dependsOn?: SyncDependency[];
+  /** UID do usuário autenticado proprietário da mutação (ou null/undefined se gerado sem login) */
+  ownerUid?: string | null;
   /** Timestamp epoch em ms da criação da operação */
   timestamp: number;
   /** Contador de tentativas realizadas */

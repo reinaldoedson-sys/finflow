@@ -20,6 +20,7 @@ export interface EnqueueOptions<T = unknown> {
   tombstone?: TombstoneMetadata;
   dependsOn?: SyncDependency[];
   maxRetries?: number;
+  ownerUid?: string | null;
 }
 
 /**
@@ -33,7 +34,8 @@ export class SyncQueue {
   constructor(
     private repository: SyncQueueRepository,
     private baseDelayMs: number = 1000,
-    private maxDelayMs: number = 30000
+    private maxDelayMs: number = 30000,
+    private getOwnerUid?: () => string | null | undefined
   ) {}
 
   /**
@@ -53,7 +55,12 @@ export class SyncQueue {
       tombstone,
       dependsOn,
       maxRetries = 5,
+      ownerUid,
     } = options;
+
+    const resolvedOwnerUid = ownerUid !== undefined
+      ? ownerUid
+      : (this.getOwnerUid ? (this.getOwnerUid() ?? null) : null);
 
     // 1. Controle de Origem: mutações remotas NUNCA devem gerar mutações na fila (Anti-Echo)
     if (mutationSource === 'REMOTE') {
@@ -99,6 +106,7 @@ export class SyncQueue {
           payload: { ...(existing.payload as object || {}), ...(payload as object || {}) } as T,
           revision: Math.max(existing.revision, revision) + 1,
           dependsOn: dependsOn || existing.dependsOn,
+          ownerUid: ownerUid !== undefined ? ownerUid : (existing.ownerUid ?? resolvedOwnerUid),
           timestamp: now,
           retries: 0,
           nextRetryAt: undefined,
@@ -118,6 +126,7 @@ export class SyncQueue {
           payload: { ...(existing.payload as object || {}), ...(payload as object || {}) } as T,
           revision: Math.max(existing.revision, revision) + 1,
           dependsOn: dependsOn || existing.dependsOn,
+          ownerUid: ownerUid !== undefined ? ownerUid : (existing.ownerUid ?? resolvedOwnerUid),
           timestamp: now,
           retries: 0,
           nextRetryAt: undefined,
@@ -143,6 +152,7 @@ export class SyncQueue {
           },
           revision: existing.revision + 1,
           dependsOn: dependsOn || existing.dependsOn,
+          ownerUid: ownerUid !== undefined ? ownerUid : (existing.ownerUid ?? resolvedOwnerUid),
           timestamp: now,
           retries: 0,
           nextRetryAt: undefined,
@@ -165,6 +175,7 @@ export class SyncQueue {
         revision: Math.max(existing.revision, revision) + 1,
         tombstone,
         dependsOn: dependsOn || existing.dependsOn,
+        ownerUid: ownerUid !== undefined ? ownerUid : (existing.ownerUid ?? resolvedOwnerUid),
         timestamp: now,
         retries: 0,
         maxRetries,
@@ -187,6 +198,7 @@ export class SyncQueue {
       revision,
       tombstone,
       dependsOn,
+      ownerUid: resolvedOwnerUid,
       timestamp: now,
       retries: 0,
       maxRetries,

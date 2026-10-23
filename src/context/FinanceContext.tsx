@@ -31,6 +31,7 @@ import { demoDataService } from '../services/demoDataService';
 import { useAuth } from './AuthContext';
 import { loadFirebase } from '../firebaseLoader';
 import {
+  db,
   isIndexedDBAvailable,
   migrateFromLocalStorageIfAvailable,
   loadAllFinancialEntities,
@@ -53,6 +54,12 @@ import { ConflictResolver } from '../services/conflictResolver';
 import { FinancialSyncService } from '../services/financialSyncService';
 import { FirestoreSyncProvider } from '../services/providers/FirestoreSyncProvider';
 import { useFirestoreSync } from '../hooks/useFirestoreSync';
+import {
+  decideOwnership,
+  canPushItem,
+  getStoredLocalOwner,
+  setStoredLocalOwner,
+} from '../domain/localOwnership';
 import {
   TransactionApplicationService,
   AccountApplicationService,
@@ -207,6 +214,9 @@ interface FinanceContextType {
   importData: (content: string, passphrase?: string) => Promise<{ success: boolean; message: string }>;
   resetToDefaults: () => Promise<void>;
   clearAllData: () => Promise<void>;
+  isOwnershipConflict: boolean;
+  confirmClearAndSwitchAccount: () => Promise<void>;
+  cancelConflictLogout: () => Promise<void>;
 }
 
 const STORAGE_KEY_PREFIX = 'finflow_app_';
@@ -274,7 +284,34 @@ const getInitialData = <T,>(key: string, defaultValue: T): T => {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { currentUser, isAuthReady } = useAuth();
+  const { currentUser, isAuthReady, logout } = useAuth();
+
+  // Guarda de Propriedade dos Dados Locais (Local Ownership & Cross-Account Isolation)
+  const [ownershipConflict, setOwnershipConflict] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setOwnershipConflict(false);
+      return;
+    }
+
+    const storedOwner = getStoredLocalOwner();
+    const decision = decideOwnership(storedOwner, currentUser.uid);
+
+    if (decision === 'claim') {
+      // Cenário (a): Primeira conta entrando assume os dados locais anônimos prévios
+      setStoredLocalOwner(currentUser.uid);
+      setOwnershipConflict(false);
+    } else if (decision === 'same') {
+      setOwnershipConflict(false);
+    } else if (decision === 'conflict') {
+      // Cenários (c e d): Conta diferente tentando entrar em aparelho com dados de outra conta
+      setOwnershipConflict(true);
+    }
+  }, [currentUser?.uid]);
+
+  // Se houver conflito de propriedade, desativa a sincronização na nuvem até resolução explícita
+  const effectiveUserId = (currentUser?.uid && !ownershipConflict) ? currentUser.uid : undefined;
 
   const [currency, setCurrencyState] = useState<CurrencyCode>(() => {
     return (localStorage.getItem(STORAGE_KEY_PREFIX + 'currency') as CurrencyCode) || 'BRL';
@@ -364,9 +401,12 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const installmentPlanRepo = useMemo(() => new IndexedDBInstallmentPlanRepository(), []);
   const syncQueueRepo = useMemo(() => new IndexedDBSyncQueueRepository(), []);
 
-  const syncQueue = useMemo(() => new SyncQueue(syncQueueRepo), [syncQueueRepo]);
+  const syncQueue = useMemo(
+    () => new SyncQueue(syncQueueRepo, 1000, 30000, () => effectiveUserId ?? null),
+    [syncQueueRepo, effectiveUserId]
+  );
   const conflictResolver = useMemo(() => new ConflictResolver(), []);
-  const cloudSyncProvider = useMemo(() => new FirestoreSyncProvider(currentUser?.uid), [currentUser?.uid]);
+  const cloudSyncProvider = useMemo(() => new FirestoreSyncProvider(effectiveUserId), [effectiveUserId]);
 
   const financialSyncService = useMemo(() => new FinancialSyncService({
     repositories: {
@@ -404,8 +444,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   );
 
   useEffect(() => {
-    cloudSyncProvider.setUserId(currentUser?.uid);
-  }, [currentUser, cloudSyncProvider]);
+    cloudSyncProvider.setUserId(effectiveUserId);
+  }, [effectiveUserId, cloudSyncProvider]);
 
   // Set initial flag after first boot and run IndexedDB migration/hydration
   const isIndexedDBHydratedRef = React.useRef(false);
@@ -463,7 +503,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     savePendingQueueToStorage(pendingQueue);
   }, [pendingQueue]);
 
-  const isCloudSynced = !!currentUser && syncStatus === 'synced' && pendingQueue.length === 0;
+  const isCloudSynced = !!effectiveUserId && syncStatus === 'synced' && pendingQueue.length === 0;
 
   // Local storage backups for offline support
   useEffect(() => {
@@ -539,7 +579,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
    * Evita duplicação porque utiliza IDs fixos e operações idempotentes (setDoc / deleteDoc).
    */
   const retrySync = useCallback(async (): Promise<boolean> => {
-    if (!currentUser) return false;
+    if (!effectiveUserId) return false;
     const currentQueue = pendingQueueRef.current;
     if (currentQueue.length === 0) {
       setSyncStatus('synced');
@@ -557,10 +597,15 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     ]);
 
     for (const op of currentQueue) {
+      // Se a operação pertencer a outro dono, não envia nem apaga (fica na fila até a decisão do usuário)
+      if (!canPushItem(op.ownerUid, effectiveUserId)) {
+        continue;
+      }
+
       try {
-        const docRef = doc(fb.db, 'users', currentUser.uid, op.collection, op.docId);
+        const docRef = doc(fb.db, 'users', effectiveUserId, op.collection, op.docId);
         const payloadWithUser = op.payload
-          ? { ...op.payload, userId: currentUser.uid }
+          ? { ...op.payload, userId: effectiveUserId }
           : op.payload;
         const clean = sanitizePayload(payloadWithUser) as Record<string, unknown>;
 
@@ -580,6 +625,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
           docId: op.docId,
           type: op.type,
           payload: op.payload,
+          ownerUid: op.ownerUid,
           lastError: errMsg
         });
       }
@@ -595,24 +641,24 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       setSyncError(`Ainda restam ${remaining.length} operações pendentes de sincronização.`);
       return false;
     }
-  }, [currentUser]);
+  }, [effectiveUserId]);
 
   // Auto-process pending sync queue when user logs in or auth resolves
   useEffect(() => {
-    if (!isAuthReady || !currentUser) return;
+    if (!isAuthReady || !effectiveUserId) return;
     retrySync();
-  }, [currentUser, isAuthReady, retrySync]);
+  }, [effectiveUserId, isAuthReady, retrySync]);
 
   // Auto-retry when device comes back online
   useEffect(() => {
     const handleOnline = () => {
-      if (currentUser) {
+      if (effectiveUserId) {
         retrySync();
       }
     };
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
-  }, [currentUser, retrySync]);
+  }, [effectiveUserId, retrySync]);
 
   // Sincroniza fila de pendências em memória quando o FinancialSyncService conclui mutações
   useEffect(() => {
@@ -626,7 +672,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Real-time Firestore Sync migrado para o hook dedicado useFirestoreSync (Fase 3.2)
   useFirestoreSync({
-    userId: currentUser?.uid,
+    userId: effectiveUserId,
     isAuthReady,
     selectedMonth,
     financialSyncService,
@@ -653,9 +699,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [accounts, transactions]);
 
   const syncLocalToCloud = async () => {
-    if (!currentUser) return;
+    if (!effectiveUserId) return;
     await retrySync();
-    await demoDataService.seed(currentUser.uid, {
+    await demoDataService.seed(effectiveUserId, {
       categories,
       accounts,
       creditCards,
@@ -1601,6 +1647,44 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setInvestmentTransactions([]);
   };
 
+  const cancelConflictLogout = useCallback(async () => {
+    await logout();
+  }, [logout]);
+
+  const confirmClearAndSwitchAccount = useCallback(async () => {
+    if (!currentUser?.uid) return;
+    const newUid = currentUser.uid;
+
+    try {
+      // 1. Limpa IndexedDB financeiro e fila de sincronização
+      await clearAllFinancialEntities();
+      if (isIndexedDBAvailable()) {
+        await db.syncQueue.clear();
+      }
+
+      // 2. Limpa localStorage das chaves do app e fila legada
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith(STORAGE_KEY_PREFIX) || key === 'finflow_pending_queue')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      savePendingQueueToStorage([]);
+
+      // 3. Grava o novo uid como dono
+      setStoredLocalOwner(newUid);
+
+      // 4. Recarrega a página para reiniciar o estado em memória com segurança
+      window.location.reload();
+    } catch (err) {
+      console.error('[FinanceContext] Erro ao limpar dados locais para troca de conta:', err);
+      setStoredLocalOwner(newUid);
+      window.location.reload();
+    }
+  }, [currentUser]);
+
   return (
     <FinanceContext.Provider
       value={{
@@ -1673,7 +1757,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         exportData,
         importData,
         resetToDefaults,
-        clearAllData
+        clearAllData,
+        isOwnershipConflict: ownershipConflict,
+        confirmClearAndSwitchAccount,
+        cancelConflictLogout
       }}
     >
       {children}

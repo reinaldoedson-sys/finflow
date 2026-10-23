@@ -11,6 +11,7 @@ import type { SyncQueue } from './syncQueue';
 import type { ConflictResolver, VersionedEntity } from './conflictResolver';
 import type { CloudSyncProvider } from './providers/CloudSyncProvider';
 import { db, FinFlowDatabase } from '../storage/indexedDB/database';
+import { canPushItem } from '../domain/localOwnership';
 import type {
   TransactionRepository,
   AccountRepository,
@@ -1350,6 +1351,13 @@ export class FinancialSyncService {
         let processedInBatch = 0;
         for (const item of batch) {
           try {
+            const activeUid = this.cloud.getUserId?.();
+
+            if (activeUid && !canPushItem(item.ownerUid, activeUid)) {
+              // Itens de outro dono NÃO são enviados nem apagados (ficam parados até a decisão do usuário)
+              continue;
+            }
+
             if (item.action === 'delete') {
               const result = await this.cloud.delete(
                 item.entityName,

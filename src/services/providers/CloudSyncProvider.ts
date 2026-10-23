@@ -20,6 +20,9 @@ export interface CloudPullOptions {
 export interface CloudSyncProvider {
   readonly name: string;
 
+  /** Retorna o identificador do usuário autenticado no provedor, se aplicável */
+  getUserId?: () => string | undefined;
+
   /** Envia uma mutação para a nuvem */
   push(item: SyncQueueItem<unknown>): Promise<CloudSyncResult<unknown>>;
 

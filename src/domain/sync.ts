@@ -31,6 +31,7 @@ export interface PendingSyncOperation {
   timestamp: string;
   retries: number;
   lastError?: string;
+  ownerUid?: string | null;
 }
 
 export const STORAGE_PENDING_QUEUE_KEY = 'finflow_app_pending_sync_queue';
@@ -111,6 +112,7 @@ export function enqueueOperation(
     type: SyncOperationType;
     payload?: SyncPayload;
     lastError?: string;
+    ownerUid?: string | null;
   }
 ): PendingSyncOperation[] {
   const opId = getOperationId(newOp.collection, newOp.docId);
@@ -125,6 +127,8 @@ export function enqueueOperation(
       return queue.filter((_, idx) => idx !== existingIndex);
     }
 
+    const effectiveOwner = newOp.ownerUid !== undefined ? newOp.ownerUid : existing.ownerUid;
+
     // Se foi criado localmente ('set') e agora atualizado ('update')
     if (existing.type === 'set' && newOp.type === 'update') {
       const updatedQueue = [...queue];
@@ -132,7 +136,8 @@ export function enqueueOperation(
         ...existing,
         payload: { ...existing.payload, ...newOp.payload },
         timestamp: now,
-        lastError: newOp.lastError ?? existing.lastError
+        lastError: newOp.lastError ?? existing.lastError,
+        ownerUid: effectiveOwner,
       };
       return updatedQueue;
     }
@@ -144,7 +149,8 @@ export function enqueueOperation(
         ...existing,
         payload: { ...existing.payload, ...newOp.payload },
         timestamp: now,
-        lastError: newOp.lastError ?? existing.lastError
+        lastError: newOp.lastError ?? existing.lastError,
+        ownerUid: effectiveOwner,
       };
       return updatedQueue;
     }
@@ -159,7 +165,8 @@ export function enqueueOperation(
       payload: newOp.payload,
       timestamp: now,
       retries: existing.retries,
-      lastError: newOp.lastError ?? existing.lastError
+      lastError: newOp.lastError ?? existing.lastError,
+      ownerUid: effectiveOwner,
     };
     return updatedQueue;
   }
@@ -173,7 +180,8 @@ export function enqueueOperation(
     payload: newOp.payload,
     timestamp: now,
     retries: 0,
-    lastError: newOp.lastError
+    lastError: newOp.lastError,
+    ownerUid: newOp.ownerUid ?? null,
   };
 
   return [...queue, item];
