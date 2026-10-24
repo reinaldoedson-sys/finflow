@@ -56,12 +56,7 @@ import { FinancialSyncService } from '../services/financialSyncService';
 import { FirestoreSyncProvider } from '../services/providers/FirestoreSyncProvider';
 import { useFirestoreSync } from '../hooks/useFirestoreSync';
 import {
-  decideOwnership,
   canPushItem,
-  getStoredLocalOwner,
-  setStoredLocalOwner,
-  getLocalStorageKeysToClearOnAccountSwitch,
-  getLocalStorageKeysToClearOnWipe,
 } from '../domain/localOwnership';
 import {
   TransactionApplicationService,
@@ -71,21 +66,15 @@ import {
 } from '../services/application';
 import { generateId } from '../domain/id';
 import { 
-  calculateAccountBalance, 
-  calculateCreditCardInvoice, 
-  calculateMonthlySummary,
-  calculateFutureCommitments,
   calculateGoalBalance,
   resolveGoalInitialAmount,
   MonthCommitment
 } from '../domain/calculations';
 import { calculateInstallmentSchedule } from '../domain/installments';
-import {
-  calculateAllEffectiveInvestmentPositions,
-  resolveAllEffectiveInvestments,
-  compareAssetWithLedger,
-  DerivedInvestmentPosition
-} from '../domain/investmentPosition';
+import { DerivedInvestmentPosition } from '../domain/investmentPosition';
+import { useCalculatedTotals } from '../hooks/useCalculatedTotals';
+import { useOwnershipGuard } from '../hooks/useOwnershipGuard';
+import { useDeviceAccountActions } from '../hooks/useDeviceAccountActions';
 import {
   SyncStatus,
   PendingSyncOperation,
@@ -291,31 +280,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const { currentUser, isAuthReady, logout } = useAuth();
 
   // Guarda de Propriedade dos Dados Locais (Local Ownership & Cross-Account Isolation)
-  const [ownershipConflict, setOwnershipConflict] = useState(false);
-
-  useEffect(() => {
-    if (!currentUser?.uid) {
-      setOwnershipConflict(false);
-      return;
-    }
-
-    const storedOwner = getStoredLocalOwner();
-    const decision = decideOwnership(storedOwner, currentUser.uid);
-
-    if (decision === 'claim') {
-      // Cenário (a): Primeira conta entrando assume os dados locais anônimos prévios
-      setStoredLocalOwner(currentUser.uid);
-      setOwnershipConflict(false);
-    } else if (decision === 'same') {
-      setOwnershipConflict(false);
-    } else if (decision === 'conflict') {
-      // Cenários (c e d): Conta diferente tentando entrar em aparelho com dados de outra conta
-      setOwnershipConflict(true);
-    }
-  }, [currentUser?.uid]);
-
-  // Se houver conflito de propriedade, desativa a sincronização na nuvem até resolução explícita
-  const effectiveUserId = (currentUser?.uid && !ownershipConflict) ? currentUser.uid : undefined;
+  const { ownershipConflict, effectiveUserId } = useOwnershipGuard(currentUser, isAuthReady);
 
   const [currency, setCurrencyState] = useState<CurrencyCode>(() => {
     return (localStorage.getItem(STORAGE_KEY_PREFIX + 'currency') as CurrencyCode) || 'BRL';
@@ -779,87 +744,26 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     });
   };
 
-  // Recalculate account and credit card balances from the single source of truth (transactions)
-  const computedAccounts = useMemo(() => {
-    return accounts.map(account => {
-      const initial = typeof account.initialBalance === 'number'
-        ? account.initialBalance
-        : (typeof account.currentBalance === 'number' ? account.currentBalance : 0);
-      return {
-        ...account,
-        initialBalance: initial,
-        currentBalance: calculateAccountBalance(initial, account.id, transactions)
-      };
-    });
-  }, [accounts, transactions]);
-
-  const computedCreditCards = useMemo(() => {
-    return creditCards.map(card => ({
-      ...card,
-      currentInvoice: calculateCreditCardInvoice(card.id, transactions)
-    }));
-  }, [creditCards, transactions]);
-
-  // Recalculate goal balances from single source of truth (initialAmount + GoalMovements)
-  const computedGoals = useMemo(() => {
-    return goals.map(goal => {
-      const movements = goalMovements.filter(m => m.goalId === goal.id);
-      const initial = resolveGoalInitialAmount(goal, movements);
-      const derivedBalance = calculateGoalBalance(initial, movements);
-      return {
-        ...goal,
-        initialAmount: initial,
-        currentAmount: derivedBalance
-      };
-    });
-  }, [goals, goalMovements]);
-
-  // Recalculate investment positions and effective assets from single source of truth (InvestmentTransaction ledger) (Etapa 10.2)
-  const computedInvestmentPositions = useMemo(() => {
-    const map = calculateAllEffectiveInvestmentPositions(investments, investmentTransactions);
-    const result: Record<string, DerivedInvestmentPosition> = {};
-    for (const [id, pos] of map.entries()) {
-      result[id] = pos;
-    }
-    return result;
-  }, [investments, investmentTransactions]);
-
-  const computedInvestments = useMemo(() => {
-    return resolveAllEffectiveInvestments(investments, investmentTransactions);
-  }, [investments, investmentTransactions]);
-
-  const getDerivedPosition = useCallback((assetId: string): DerivedInvestmentPosition | undefined => {
-    return computedInvestmentPositions[assetId];
-  }, [computedInvestmentPositions]);
-
-  // Auditoria interna em ambiente de desenvolvimento para detectar divergências entre dados armazenados e ledger (Etapa 10.2)
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') {
-      for (const asset of investments) {
-        const derived = computedInvestmentPositions[asset.id];
-        if (derived && derived.hasLedger) {
-          const div = compareAssetWithLedger(asset, derived);
-          if (div.hasDivergence) {
-            console.warn(
-              `[FinFlow Ledger Audit] Divergência detectada no ativo ${asset.ticker || asset.id}: ` +
-              `Armazenado (Qtd: ${div.storedQuantity}, PM: ${div.storedAveragePrice}) vs ` +
-              `Ledger (Qtd: ${div.derivedQuantity}, PM: ${div.derivedAveragePrice})`
-            );
-          }
-        }
-      }
-    }
-  }, [investments, computedInvestmentPositions]);
-
-  // Monthly summary calculated via pure domain function
-  const summary = useMemo(() => {
-    return calculateMonthlySummary(computedAccounts, computedCreditCards, transactions, selectedMonth);
-  }, [computedAccounts, computedCreditCards, transactions, selectedMonth]);
-
-  // Comprometimentos futuros projetados para os próximos 6 meses
-  const futureCommitments = useMemo(() => {
-    return calculateFutureCommitments(transactions, 6, selectedMonth);
-  }, [transactions, selectedMonth]);
+  // Derivados, Memos e Agregados Financeiros (extraído para useCalculatedTotals - Fase 4.2)
+  const {
+    computedAccounts,
+    computedCreditCards,
+    computedGoals,
+    computedInvestmentPositions,
+    computedInvestments,
+    getDerivedPosition,
+    summary,
+    futureCommitments,
+  } = useCalculatedTotals({
+    accounts,
+    creditCards,
+    transactions,
+    goals,
+    goalMovements,
+    investments,
+    investmentTransactions,
+    selectedMonth,
+  });
 
   const goToPreviousMonth = () => setSelectedMonth(prev => getPreviousMonth(prev));
   const goToNextMonth = () => setSelectedMonth(prev => getNextMonth(prev));
@@ -1629,57 +1533,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setInvestmentTransactions([]);
   };
 
-  const cancelConflictLogout = useCallback(async () => {
-    await logout();
-  }, [logout]);
-
-  const wipeLocalFinancialStorage = async (keysToRemove: string[]) => {
-    // 1. Limpa IndexedDB financeiro e fila de sincronização
-    await clearAllFinancialEntities();
-    if (isIndexedDBAvailable()) {
-      await db.syncQueue.clear();
-    }
-
-    // 2. Limpa localStorage das chaves selecionadas e zera fila pendente legada
-    for (const k of keysToRemove) {
-      try {
-        localStorage.removeItem(k);
-      } catch (err) {
-        console.warn(`[FinanceContext] Falha ao remover chave "${k}" do localStorage:`, err);
-      }
-    }
-    savePendingQueueToStorage([]);
-  };
-
-  const confirmClearAndSwitchAccount = useCallback(async () => {
-    if (!currentUser?.uid) return;
-    const newUid = currentUser.uid;
-
-    try {
-      const keysToRemove = getLocalStorageKeysToClearOnAccountSwitch(Object.keys(localStorage));
-      await wipeLocalFinancialStorage(keysToRemove);
-      setStoredLocalOwner(newUid);
-      window.location.reload();
-    } catch (err) {
-      console.error('[FinanceContext] Erro ao limpar dados locais para troca de conta:', err);
-      setStoredLocalOwner(newUid);
-      window.location.reload();
-    }
-  }, [currentUser]);
-
-  const signOutAndWipeDevice = useCallback(async () => {
-    try {
-      await logout();
-      const keysToRemove = getLocalStorageKeysToClearOnWipe(Object.keys(localStorage));
-      await wipeLocalFinancialStorage(keysToRemove);
-      window.location.reload();
-    } catch (err) {
-      console.error('[FinanceContext] Erro ao sair e apagar dados deste aparelho:', err);
-      const keysToRemove = getLocalStorageKeysToClearOnWipe(Object.keys(localStorage));
-      await wipeLocalFinancialStorage(keysToRemove);
-      window.location.reload();
-    }
-  }, [logout]);
+  const {
+    confirmClearAndSwitchAccount,
+    cancelConflictLogout,
+    signOutAndWipeDevice,
+  } = useDeviceAccountActions({ currentUser, logout });
 
   return (
     <FinanceContext.Provider
