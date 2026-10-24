@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { SecurityProvider } from './context/SecurityContext';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
 import { PinLockModal } from './components/PinLockModal';
 import { TransactionModal } from './components/TransactionModal';
 import { AccountModal } from './components/AccountModal';
@@ -50,6 +51,25 @@ const FinFlowApp: React.FC = () => {
 
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
 
+  // Sidebar expanded / collapsed state (persisted)
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('finflow_sidebar_expanded') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('finflow_sidebar_expanded', String(isSidebarExpanded));
+    } catch {
+      // ignore
+    }
+  }, [isSidebarExpanded]);
+
   // Modals state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -87,6 +107,10 @@ const FinFlowApp: React.FC = () => {
         e.preventDefault();
         setEditingTx(null);
         setIsTxModalOpen(true);
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        setIsSidebarExpanded(prev => !prev);
       }
     };
 
@@ -168,112 +192,129 @@ const FinFlowApp: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0b0f17] text-slate-100 selection:bg-emerald-500/20 selection:text-emerald-300">
-      {/* Top Bar Navigation */}
-      <Header
+    <div className="min-h-screen flex bg-[#0b0f17] text-slate-100 selection:bg-emerald-500/20 selection:text-emerald-300">
+      {/* Sidebar Expansível (Desktop persistent + Mobile off-canvas drawer) */}
+      <Sidebar
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         onOpenNewTransaction={handleOpenNewTransaction}
-        onOpenSettings={() => setCurrentTab('settings')}
+        isExpanded={isSidebarExpanded}
+        onToggleExpanded={() => setIsSidebarExpanded(prev => !prev)}
+        isMobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
-      {/* Main View Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-24 md:pb-6">
-        <UpdateBanner />
-        <PWAInstallBanner />
-        <Suspense fallback={<ViewLoadingFallback />}>
-          {currentTab === 'dashboard' && (
-            <DashboardView
-              onOpenNewTransaction={handleOpenNewTransaction}
-              onOpenAccountModal={handleOpenNewAccount}
-              onOpenBudgetModal={handleOpenBudgetModal}
-              onOpenDepositModal={handleOpenDepositModal}
-              onSelectTransactionToEdit={handleEditTransaction}
-              onNavigateToTab={setCurrentTab}
-            />
-          )}
+      {/* Main Content Column */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Top Bar Navigation */}
+        <Header
+          currentTab={currentTab}
+          onTabChange={setCurrentTab}
+          onOpenNewTransaction={handleOpenNewTransaction}
+          onOpenSettings={() => setCurrentTab('settings')}
+          onOpenMobileNav={() => setIsMobileNavOpen(true)}
+          isSidebarExpanded={isSidebarExpanded}
+          onToggleSidebar={() => setIsSidebarExpanded(prev => !prev)}
+        />
 
-          {currentTab === 'transactions' && (
-            <TransactionsView
-              onOpenNewTransaction={handleOpenNewTransaction}
-              onEditTransaction={handleEditTransaction}
-            />
-          )}
+        {/* Main View Area */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-24 md:pb-6">
+          <UpdateBanner />
+          <PWAInstallBanner />
+          <Suspense fallback={<ViewLoadingFallback />}>
+            {currentTab === 'dashboard' && (
+              <DashboardView
+                onOpenNewTransaction={handleOpenNewTransaction}
+                onOpenAccountModal={handleOpenNewAccount}
+                onOpenBudgetModal={handleOpenBudgetModal}
+                onOpenDepositModal={handleOpenDepositModal}
+                onSelectTransactionToEdit={handleEditTransaction}
+                onNavigateToTab={setCurrentTab}
+              />
+            )}
 
-          {currentTab === 'accounts' && (
-            <AccountsView
-              onOpenNewAccount={handleOpenNewAccount}
-              onOpenNewCreditCard={handleOpenNewCreditCard}
-              onEditAccount={handleEditAccount}
-              onEditCreditCard={handleEditCreditCard}
-            />
-          )}
+            {currentTab === 'transactions' && (
+              <TransactionsView
+                onOpenNewTransaction={handleOpenNewTransaction}
+                onEditTransaction={handleEditTransaction}
+              />
+            )}
 
-          {currentTab === 'portfolio' && (
-            <PortfolioMonitoringView
-              onOpenNewInvestment={handleOpenNewInvestment}
-              onEditInvestment={handleEditInvestment}
-              onNavigateToInvestments={() => setCurrentTab('investments')}
-            />
-          )}
+            {currentTab === 'accounts' && (
+              <AccountsView
+                onOpenNewAccount={handleOpenNewAccount}
+                onOpenNewCreditCard={handleOpenNewCreditCard}
+                onEditAccount={handleEditAccount}
+                onEditCreditCard={handleEditCreditCard}
+              />
+            )}
 
-          {currentTab === 'investments' && (
-            <InvestmentsView
-              onOpenNewInvestment={handleOpenNewInvestment}
-              onEditInvestment={handleEditInvestment}
-              onNavigateToPortfolio={() => setCurrentTab('portfolio')}
-            />
-          )}
+            {currentTab === 'portfolio' && (
+              <PortfolioMonitoringView
+                onOpenNewInvestment={handleOpenNewInvestment}
+                onEditInvestment={handleEditInvestment}
+                onNavigateToInvestments={() => setCurrentTab('investments')}
+              />
+            )}
 
-          {currentTab === 'installments' && (
-            <InstallmentsView
-              onOpenNewInstallment={() => setIsInstallmentModalOpen(true)}
-            />
-          )}
+            {currentTab === 'investments' && (
+              <InvestmentsView
+                onOpenNewInvestment={handleOpenNewInvestment}
+                onEditInvestment={handleEditInvestment}
+                onNavigateToPortfolio={() => setCurrentTab('portfolio')}
+              />
+            )}
 
-          {currentTab === 'budgets' && (
-            <BudgetsView
-              onOpenBudgetModal={handleOpenBudgetModal}
-            />
-          )}
+            {currentTab === 'installments' && (
+              <InstallmentsView
+                onOpenNewInstallment={() => setIsInstallmentModalOpen(true)}
+              />
+            )}
 
-          {currentTab === 'goals' && (
-            <GoalsView
-              onOpenNewGoal={handleOpenNewGoal}
-              onEditGoal={handleEditGoal}
-              onOpenDepositModal={handleOpenDepositModal}
-            />
-          )}
+            {currentTab === 'budgets' && (
+              <BudgetsView
+                onOpenBudgetModal={handleOpenBudgetModal}
+              />
+            )}
 
-          {currentTab === 'reports' && (
-            <ReportsView />
-          )}
+            {currentTab === 'goals' && (
+              <GoalsView
+                onOpenNewGoal={handleOpenNewGoal}
+                onEditGoal={handleEditGoal}
+                onOpenDepositModal={handleOpenDepositModal}
+              />
+            )}
 
-          {currentTab === 'settings' && (
-            <SettingsView
-              onOpenBackupModal={() => setIsBackupModalOpen(true)}
-            />
-          )}
-        </Suspense>
-      </main>
+            {currentTab === 'reports' && (
+              <ReportsView />
+            )}
 
-      {/* Footer */}
-      <footer className="mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 pb-24 md:pb-6 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span className="font-semibold text-slate-400">FinFlow</span>
-            <span>· Gestão Financeira Pessoal com Dados Locais e Sincronização Opcional</span>
+            {currentTab === 'settings' && (
+              <SettingsView
+                onOpenBackupModal={() => setIsBackupModalOpen(true)}
+              />
+            )}
+          </Suspense>
+        </main>
+
+        {/* Footer */}
+        <footer className="mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 pb-24 md:pb-6 text-center text-xs text-slate-500">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span className="font-semibold text-slate-400">FinFlow</span>
+              <span>· Gestão Financeira Pessoal com Dados Locais e Sincronização Opcional</span>
+            </div>
+            <div className="flex items-center gap-4 text-slate-500 text-[11px]">
+              <span>100% Local no Navegador</span>
+              <span>·</span>
+              <span>Bloqueio por PIN</span>
+              <span>·</span>
+              <span>Zero Rastreamento</span>
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-slate-500 text-[11px]">
-            <span>100% Local no Navegador</span>
-            <span>·</span>
-            <span>Bloqueio por PIN</span>
-            <span>·</span>
-            <span>Zero Rastreamento</span>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
 
       {/* Mobile Native Bottom Navigation */}
       <MobileBottomNav

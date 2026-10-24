@@ -253,7 +253,7 @@ export class SyncQueue {
    * Retorna os próximos itens elegíveis para processamento ordenados cronologicamente,
    * aplicando BLOQUEIO CAUSAL estrito: itens com dependências pendentes na fila não são liberados.
    */
-  async getNextEligibleBatch(limit: number = 20): Promise<SyncQueueItem[]> {
+  async getNextEligibleBatch(limit: number = 20, ignoreBackoff: boolean = false): Promise<SyncQueueItem[]> {
     const allItems = await this.repository.getAll();
     if (allItems.length === 0) return [];
 
@@ -266,8 +266,8 @@ export class SyncQueue {
     const eligible: SyncQueueItem[] = [];
 
     for (const item of allItems) {
-      // 1. Checa backoff
-      if (item.nextRetryAt && item.nextRetryAt > now) {
+      // 1. Checa backoff (ignorado quando ignoreBackoff é true para tentativas manuais)
+      if (!ignoreBackoff && item.nextRetryAt && item.nextRetryAt > now) {
         continue;
       }
 

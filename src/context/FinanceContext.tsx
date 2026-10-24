@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 import { 
   Transaction, 
   Account, 
@@ -24,7 +24,8 @@ import {
   INITIAL_INVESTMENTS,
   INITIAL_INVESTMENT_TRANSACTIONS
 } from '../utils/mockData';
-import { fetchMarketQuotes, getCachedQuotes } from '../services/marketQuotes';
+import { getCachedQuotes } from '../services/marketQuotes';
+import { useMarketQuotes } from '../hooks/useMarketQuotes';
 import { getCurrentMonth, getPreviousMonth, getNextMonth } from '../utils/currency';
 import { backupService } from '../services/backupService';
 import { demoDataService } from '../services/demoDataService';
@@ -390,8 +391,6 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [investmentTransactions, setInvestmentTransactions] = useState<InvestmentTransaction[]>(() =>
     getInitialData('investment_transactions', INITIAL_INVESTMENT_TRANSACTIONS)
   );
-  const [isRefreshingQuotes, setIsRefreshingQuotes] = useState(false);
-  const [lastQuotesUpdate, setLastQuotesUpdate] = useState<string | null>(null);
 
   // Instâncias dos repositórios locais e serviços Local-First (Etapa 2.4 - TRANSACTIONS)
   const transactionRepo = useMemo(() => new IndexedDBTransactionRepository(), []);
@@ -604,73 +603,109 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [investmentTransactions]);
 
   /**
-   * Reprocessa todas as operações pendentes na fila de sincronização.
+   * Reprocessa todas as operações pendentes na fila de sincronização (Dexie e legada).
    * Evita duplicação porque utiliza IDs fixos e operações idempotentes (setDoc / deleteDoc).
    */
   const retrySync = useCallback(async (): Promise<boolean> => {
     if (!effectiveUserId) return false;
-    const currentQueue = pendingQueueRef.current;
-    if (currentQueue.length === 0) {
-      setSyncStatus('synced');
-      setSyncError(null);
-      return true;
-    }
 
     setSyncStatus('pending');
-    let remaining = [...currentQueue];
+    setSyncError(null);
+
     let allSucceeded = true;
 
-    const [fb, { doc, setDoc, deleteDoc }] = await Promise.all([
-      loadFirebase(),
-      import('firebase/firestore'),
-    ]);
-
-    for (const op of currentQueue) {
-      // Se a operação pertencer a outro dono, não envia nem apaga (fica na fila até a decisão do usuário)
-      if (!canPushItem(op.ownerUid, effectiveUserId)) {
-        continue;
+    // 1. Processa a fila persistente IndexedDB/Dexie através do FinancialSyncService (forçando retry)
+    try {
+      cloudSyncProvider.setUserId(effectiveUserId);
+      await financialSyncService.processQueue({ force: true });
+      if (isIndexedDBAvailable()) {
+        const count = await db.syncQueue.count();
+        setDexieQueueCount(count);
+        if (count > 0) {
+          allSucceeded = false;
+        }
       }
+    } catch (dexieErr) {
+      allSucceeded = false;
+      console.warn('[FinanceContext] Erro ao processar fila Dexie no retrySync:', dexieErr);
+    }
+
+    // 2. Processa a fila legada em memória / localStorage (se houver itens)
+    const currentQueue = pendingQueueRef.current;
+    if (currentQueue.length > 0) {
+      let remaining = [...currentQueue];
 
       try {
-        const docRef = doc(fb.db, 'users', effectiveUserId, op.collection, op.docId);
-        const payloadWithUser = op.payload
-          ? { ...op.payload, userId: effectiveUserId }
-          : op.payload;
-        const clean = sanitizePayload(payloadWithUser) as Record<string, unknown>;
+        const [fb, { doc, setDoc, deleteDoc }] = await Promise.all([
+          loadFirebase(),
+          import('firebase/firestore'),
+        ]);
 
-        if (op.type === 'set') {
-          await setDoc(docRef, clean);
-        } else if (op.type === 'update') {
-          await setDoc(docRef, clean, { merge: true });
-        } else if (op.type === 'delete') {
-          await deleteDoc(docRef);
+        for (const op of currentQueue) {
+          if (!canPushItem(op.ownerUid, effectiveUserId)) {
+            continue;
+          }
+
+          try {
+            const docRef = doc(fb.db, 'users', effectiveUserId, op.collection, op.docId);
+            const payloadWithUser = op.payload
+              ? { ...op.payload, userId: effectiveUserId }
+              : op.payload;
+            const clean = sanitizePayload(payloadWithUser) as Record<string, unknown>;
+
+            if (op.type === 'set') {
+              await setDoc(docRef, clean);
+            } else if (op.type === 'update') {
+              await setDoc(docRef, clean, { merge: true });
+            } else if (op.type === 'delete') {
+              await deleteDoc(docRef);
+            }
+            remaining = dequeueOperation(remaining, op.collection, op.docId);
+          } catch (err) {
+            allSucceeded = false;
+            const errMsg = err instanceof Error ? err.message : String(err);
+            remaining = enqueueOperation(remaining, {
+              collection: op.collection,
+              docId: op.docId,
+              type: op.type,
+              payload: op.payload,
+              ownerUid: op.ownerUid,
+              lastError: errMsg
+            });
+          }
         }
-        remaining = dequeueOperation(remaining, op.collection, op.docId);
-      } catch (err) {
+
+        setPendingQueue(remaining);
+        if (remaining.length > 0) {
+          allSucceeded = false;
+        }
+      } catch (legacyErr) {
         allSucceeded = false;
-        const errMsg = err instanceof Error ? err.message : String(err);
-        remaining = enqueueOperation(remaining, {
-          collection: op.collection,
-          docId: op.docId,
-          type: op.type,
-          payload: op.payload,
-          ownerUid: op.ownerUid,
-          lastError: errMsg
-        });
+        console.warn('[FinanceContext] Erro ao carregar Firebase para fila legada:', legacyErr);
       }
     }
 
-    setPendingQueue(remaining);
-    if (allSucceeded && remaining.length === 0) {
+    let currentDexieCount = 0;
+    if (isIndexedDBAvailable()) {
+      try {
+        currentDexieCount = await db.syncQueue.count();
+        setDexieQueueCount(currentDexieCount);
+      } catch {
+        // ignore
+      }
+    }
+
+    const totalRemaining = pendingQueueRef.current.length + currentDexieCount;
+    if (allSucceeded && totalRemaining === 0) {
       setSyncStatus('synced');
       setSyncError(null);
       return true;
     } else {
       setSyncStatus('error');
-      setSyncError(`Ainda restam ${remaining.length} operações pendentes de sincronização.`);
+      setSyncError(`Ainda restam ${totalRemaining} operação(ões) aguardando sincronização com a nuvem.`);
       return false;
     }
-  }, [effectiveUserId]);
+  }, [effectiveUserId, cloudSyncProvider, financialSyncService]);
 
   // Auto-process pending sync queue when user logs in or auth resolves
   useEffect(() => {
@@ -1236,100 +1271,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setInstallmentPlans(prev => prev.filter(p => p.id !== planId));
   };
 
-  // Investment Actions
-  const refreshInvestmentQuotes = async () => {
-    if (investments.length === 0) return;
-    setIsRefreshingQuotes(true);
-
-    const autoTickers = investments
-      .filter(inv => inv.autoUpdate && inv.ticker)
-      .map(inv => inv.ticker);
-
-    if (autoTickers.length === 0) {
-      setIsRefreshingQuotes(false);
-      return;
-    }
-
-    try {
-      const { quotes } = await fetchMarketQuotes(autoTickers);
-      if (quotes && Object.keys(quotes).length > 0) {
-        let updatedList: InvestmentAsset[] = [];
-        setInvestments(prev => {
-          updatedList = prev.map(inv => {
-            const upper = (inv.ticker || '').toUpperCase();
-            const q = quotes[upper] || quotes[`${upper}.SA`];
-            if (q && typeof q.price === 'number') {
-              return {
-                ...inv,
-                currentPrice: q.price,
-                previousClose: q.previousClose,
-                changePercent: q.changePercent,
-                lastPriceUpdate: q.updatedAt || new Date().toISOString()
-              };
-            }
-            return inv;
-          });
-          try {
-            localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(updatedList));
-          } catch (e) {
-            console.warn('Erro ao salvar investimentos no localStorage:', e);
-          }
-          return updatedList;
-        });
-        setLastQuotesUpdate(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-
-        // Atualiza cache local no IndexedDB e sincroniza na nuvem Firestore se autenticado
-        for (const inv of updatedList) {
-          const upper = (inv.ticker || '').toUpperCase();
-          const q = quotes[upper] || quotes[`${upper}.SA`];
-          if (q && typeof q.price === 'number') {
-            const quoteMetadata = {
-              previousClose: q.previousClose,
-              changePercent: q.changePercent,
-              lastPriceUpdate: inv.lastPriceUpdate || new Date().toISOString(),
-            };
-            financialSyncService.updateInvestmentMarketQuote(inv.id, q.price, quoteMetadata).catch(console.warn);
-
-            if (currentUser) {
-              loadFirebase().then(async (fb) => {
-                const { doc, setDoc } = await import('firebase/firestore');
-                const invDocRef = doc(fb.db, 'users', currentUser.uid, 'investments', inv.id);
-                setDoc(invDocRef, {
-                  userId: currentUser.uid,
-                  currentPrice: q.price,
-                  ...(q.previousClose !== undefined ? { previousClose: q.previousClose } : {}),
-                  ...(q.changePercent !== undefined ? { changePercent: q.changePercent } : {}),
-                  lastPriceUpdate: quoteMetadata.lastPriceUpdate,
-                  updatedAt: quoteMetadata.lastPriceUpdate,
-                }, { merge: true }).catch(err => {
-                  console.warn('[FinanceContext] Erro ao sincronizar cotação no Firestore:', err);
-                });
-              }).catch(console.warn);
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Erro ao atualizar cotações de investimentos:', err);
-    } finally {
-      setIsRefreshingQuotes(false);
-    }
-  };
-
-  // Quotes refresh automático ao inicializar e quando a lista de investimentos for carregada
-  const lastAutoQuoteCheckRef = React.useRef<number>(0);
-  const refreshInvestmentQuotesRef = useRef(refreshInvestmentQuotes);
-  refreshInvestmentQuotesRef.current = refreshInvestmentQuotes;
-
-  useEffect(() => {
-    if (investments.length > 0) {
-      const now = Date.now();
-      if (now - lastAutoQuoteCheckRef.current > 5 * 60 * 1000) {
-        lastAutoQuoteCheckRef.current = now;
-        refreshInvestmentQuotesRef.current();
-      }
-    }
-  }, [investments.length]);
+  // Investment Actions (Cotações extraídas para useMarketQuotes - Fase 4.1)
+  const {
+    refreshInvestmentQuotes,
+    isRefreshingQuotes,
+    lastQuotesUpdate,
+  } = useMarketQuotes({
+    investments,
+    setInvestments,
+    currentUser,
+    financialSyncService,
+    storageKeyPrefix: STORAGE_KEY_PREFIX,
+  });
 
   // Investment CRUD (Delegado para InvestmentApplicationService - Fase 3.3)
   const addInvestment = async (asset: Omit<InvestmentAsset, 'id' | 'createdAt'>): Promise<string> => {

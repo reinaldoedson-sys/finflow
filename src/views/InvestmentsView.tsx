@@ -87,6 +87,31 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
   const [selectedDetailAsset, setSelectedDetailAsset] = useState<InvestmentAsset | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
+  const [isRetryingSync, setIsRetryingSync] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  const handleRetrySync = async () => {
+    if (isRetryingSync) return;
+    setIsRetryingSync(true);
+    setSyncFeedback(null);
+    try {
+      const success = await retrySync();
+      if (success) {
+        setSyncFeedback('Sincronização concluída com sucesso!');
+        setTimeout(() => setSyncFeedback(null), 3000);
+      } else {
+        setSyncFeedback('Não foi possível sincronizar agora. Verifique a conexão com a nuvem.');
+        setTimeout(() => setSyncFeedback(null), 4000);
+      }
+    } catch (err) {
+      console.warn('Erro ao sincronizar manualmente:', err);
+      setSyncFeedback('Erro ao conectar com a nuvem.');
+      setTimeout(() => setSyncFeedback(null), 4000);
+    } finally {
+      setIsRetryingSync(false);
+    }
+  };
+
   const handleOpenAporte = (assetId: string | null = null) => {
     setSelectedAporteAssetId(assetId);
     setIsAporteModalOpen(true);
@@ -272,22 +297,33 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
           </div>
         )}
 
-        {currentUser && (pendingSyncCount > 0 || syncStatus === 'error') && (
+        {currentUser && (pendingSyncCount > 0 || syncStatus === 'error' || syncFeedback) && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-xs animate-in fade-in">
             <div className="flex items-center gap-2.5 text-amber-200">
-              <CloudOff className="w-4 h-4 text-amber-400 shrink-0" />
+              {isRetryingSync ? (
+                <RefreshCw className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />
+              ) : (
+                <CloudOff className="w-4 h-4 text-amber-400 shrink-0" />
+              )}
               <span>
-                {pendingSyncCount > 0
-                  ? `${pendingSyncCount} operação(ões) aguardando sincronização com a nuvem.`
-                  : syncError || 'Falha ao sincronizar com a nuvem.'}
+                {syncFeedback ? (
+                  <span className={syncFeedback.includes('sucesso') ? 'text-emerald-300 font-semibold' : 'text-amber-200 font-medium'}>
+                    {syncFeedback}
+                  </span>
+                ) : pendingSyncCount > 0 ? (
+                  `${pendingSyncCount} operação(ões) aguardando sincronização com a nuvem.`
+                ) : (
+                  syncError || 'Falha ao sincronizar com a nuvem.'
+                )}
               </span>
             </div>
             <button
-              onClick={() => retrySync()}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold transition-colors shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              onClick={handleRetrySync}
+              disabled={isRetryingSync}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-semibold transition-colors shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Sincronizar Agora</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isRetryingSync ? 'animate-spin' : ''}`} />
+              <span>{isRetryingSync ? 'Sincronizando...' : 'Sincronizar Agora'}</span>
             </button>
           </div>
         )}

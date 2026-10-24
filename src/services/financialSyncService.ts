@@ -1320,7 +1320,7 @@ export class FinancialSyncService {
     });
   }
 
-  async processQueue(): Promise<void> {
+  async processQueue(options?: { force?: boolean }): Promise<void> {
     if (!this.isOnline) {
       this.setStatus('offline');
       return;
@@ -1330,19 +1330,19 @@ export class FinancialSyncService {
       return this.currentProcessingPromise;
     }
 
-    this.currentProcessingPromise = this.executeProcessQueue().finally(() => {
+    this.currentProcessingPromise = this.executeProcessQueue(options?.force ?? false).finally(() => {
       this.currentProcessingPromise = null;
     });
 
     return this.currentProcessingPromise;
   }
 
-  private async executeProcessQueue(): Promise<void> {
+  private async executeProcessQueue(force: boolean = false): Promise<void> {
     this.setStatus('syncing');
 
     try {
       while (true) {
-        const batch = await this.queue.getNextEligibleBatch(20);
+        const batch = await this.queue.getNextEligibleBatch(20, force);
 
         if (batch.length === 0) {
           break;
