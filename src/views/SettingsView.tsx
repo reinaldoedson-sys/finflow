@@ -21,8 +21,14 @@ import {
   Sparkles, 
   ExternalLink,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Info
 } from 'lucide-react';
+import {
+  getResolvedConflictEntries,
+  ResolvedConflictEntry,
+  formatConflictSnapshotText
+} from '../domain/conflictLog';
 
 interface NavigatorWithStandalone extends Navigator {
   standalone?: boolean;
@@ -76,6 +82,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
       setIsWiping(false);
     }
   };
+
+  const [resolvedConflicts, setResolvedConflicts] = useState<ResolvedConflictEntry[]>([]);
+  const [showConflictDetails, setShowConflictDetails] = useState(false);
+
+  useEffect(() => {
+    setResolvedConflicts(getResolvedConflictEntries());
+  }, [globalSyncStatus]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -342,6 +355,73 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Seus lançamentos, contas e orçamentos estão sendo salvos com isolamento total no banco de dados Firestore sob sua identidade protegida.
             </p>
+
+            {resolvedConflicts.length > 0 && (
+              <div className="pt-3 border-t border-slate-800/80">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <Info className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span>
+                      <strong className="text-slate-200 font-semibold">{resolvedConflicts.length}</strong> {resolvedConflicts.length === 1 ? 'conflito de edição resolvido' : 'conflitos de edição resolvidos'} automaticamente
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowConflictDetails(!showConflictDetails)}
+                    className="text-xs text-sky-400 hover:text-sky-300 font-medium underline underline-offset-2 transition-colors cursor-pointer"
+                  >
+                    {showConflictDetails ? 'Ocultar detalhes' : 'Ver detalhes'}
+                  </button>
+                </div>
+
+                {showConflictDetails && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 text-[11px] text-slate-400 font-medium">
+                      <span>Registro / Motivo</span>
+                      <span>Horário</span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                      {resolvedConflicts.map(c => {
+                        const keptText = formatConflictSnapshotText(c.entityName, c.kept, currency);
+                        const discardedText = formatConflictSnapshotText(c.entityName, c.discarded, currency);
+                        const hasSnapshots = Boolean(keptText || discardedText);
+
+                        return (
+                          <div key={c.id} className="flex items-start justify-between gap-3 text-[11px] pb-2 border-b border-slate-800/40 last:border-0 last:pb-0">
+                            <div className="space-y-0.5">
+                              <div>
+                                <span className="font-semibold text-slate-200">
+                                  {c.entityName === 'transactions' ? 'Transação' : c.entityName === 'investmentTransactions' ? 'Investimento' : c.entityName === 'goalMovements' ? 'Meta' : c.entityName}:
+                                </span>{' '}
+                                <span className="text-slate-300">{c.description || c.entityId}</span>
+                              </div>
+                              {hasSnapshots && (
+                                <div className="space-y-0.5 text-[10px] mt-1 pl-1.5 border-l-2 border-slate-700">
+                                  {keptText && (
+                                    <p className="text-emerald-400">
+                                      <strong className="text-emerald-300 font-semibold">Mantido:</strong> {keptText}
+                                    </p>
+                                  )}
+                                  {discardedText && (
+                                    <p className="text-rose-400">
+                                      <strong className="text-rose-300 font-semibold">Descartado:</strong> {discardedText}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                              <p className="text-[10px] text-slate-400 mt-0.5">{c.reason}</p>
+                            </div>
+                            <span className="text-[10px] text-slate-400 whitespace-nowrap font-mono shrink-0">
+                              {new Date(c.resolvedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-800/30 border border-slate-800">
@@ -367,9 +447,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
       <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Smartphone className="w-4 h-4" />
-            </div>
+            <img
+              src="/pwa-192x192.png"
+              alt="FinFlow"
+              className="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-700/50"
+            />
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-white">Aplicativo no Celular & APK</h3>

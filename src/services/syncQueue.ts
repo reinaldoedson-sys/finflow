@@ -210,6 +210,13 @@ export class SyncQueue {
   }
 
   /**
+   * Consulta item na fila por ID.
+   */
+  async getItem(id: string): Promise<SyncQueueItem | null> {
+    return this.repository.getById(id);
+  }
+
+  /**
    * Remove item após sucesso confirmado pela nuvem.
    */
   async dequeue(id: string): Promise<void> {

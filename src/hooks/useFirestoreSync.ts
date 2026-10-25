@@ -6,6 +6,7 @@ import { createAsyncSubscription } from '../utils/asyncSubscription';
 import { mergeCloudWithPending, type PendingSyncOperation } from '../domain/sync';
 import { resolveGoalInitialAmount } from '../domain/calculations';
 import { DEFAULT_CATEGORIES } from '../utils/mockData';
+import { clearSampleDataFromIndexedDB } from '../storage/indexedDB';
 import type { FinancialSyncService } from '../services/financialSyncService';
 import type {
   Account,
@@ -139,6 +140,12 @@ export function setupFirestoreSync(options: UseFirestoreSyncOptions): UseFiresto
 
             if (setAccounts) {
               setAccounts(prev => mergeCloudWithPending(list, getPendingQueue(), 'accounts', prev));
+            }
+            if (list.length > 0 && typeof localStorage !== 'undefined') {
+              if (localStorage.getItem('finflow_app_demo_cleared') !== 'true') {
+                localStorage.setItem('finflow_app_demo_cleared', 'true');
+                void clearSampleDataFromIndexedDB();
+              }
             }
             financialSyncService.hydrateFromCloud('accounts', list).catch(err => {
               console.warn('[useFirestoreSync] Erro ao hidratar contas no IndexedDB:', err);

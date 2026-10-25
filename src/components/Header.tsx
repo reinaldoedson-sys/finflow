@@ -12,7 +12,6 @@ import {
   Lock, 
   Plus, 
   Settings, 
-  ShieldCheck, 
   Cloud, 
   LogOut, 
   LogIn,
@@ -76,9 +75,11 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Mobile Brand (visible only < md) */}
           <div className="flex md:hidden items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            </div>
+            <img
+              src="/pwa-192x192.png"
+              alt="FinFlow"
+              className="w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
+            />
             <span className="text-base font-extrabold tracking-tight text-white">
               FinFlow
             </span>
@@ -149,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Cloud Sync & Google Auth */}
-          <div className="hidden sm:block">
+          <div className="flex items-center">
             {currentUser ? (
               <div className="relative">
                 <button

@@ -16,7 +16,7 @@ import { InstallmentModal } from './components/InstallmentModal';
 import { InvestmentModal } from './components/InvestmentModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { UpdateBanner } from './components/UpdateBanner';
-import { MobileBottomNav } from './components/MobileBottomNav';
+import { SampleDataBanner } from './components/SampleDataBanner';
 
 import { DashboardView } from './views/DashboardView';
 const TransactionsView = lazy(() => import('./views/TransactionsView').then(m => ({ default: m.TransactionsView })));
@@ -39,7 +39,6 @@ const ViewLoadingFallback: React.FC = () => (
 );
 
 import { Transaction, Account, CreditCard, FinancialGoal, InvestmentAsset } from './types/finance';
-import { ShieldCheck } from 'lucide-react';
 
 const FinFlowApp: React.FC = () => {
   const {
@@ -218,9 +217,10 @@ const FinFlowApp: React.FC = () => {
         />
 
         {/* Main View Area */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-24 md:pb-6">
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-6 sm:pb-8">
           <UpdateBanner />
           <PWAInstallBanner />
+          <SampleDataBanner />
           <Suspense fallback={<ViewLoadingFallback />}>
             {currentTab === 'dashboard' && (
               <DashboardView
@@ -298,10 +298,10 @@ const FinFlowApp: React.FC = () => {
         </main>
 
         {/* Footer */}
-        <footer className="mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 pb-24 md:pb-6 text-center text-xs text-slate-500">
+        <footer className="mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 text-center text-xs text-slate-500">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <img src="/pwa-192x192.png" alt="FinFlow" className="w-4 h-4 rounded object-cover shadow-sm" />
               <span className="font-semibold text-slate-400">FinFlow</span>
               <span>· Gestão Financeira Pessoal com Dados Locais e Sincronização Opcional</span>
             </div>
@@ -315,13 +315,6 @@ const FinFlowApp: React.FC = () => {
           </div>
         </footer>
       </div>
-
-      {/* Mobile Native Bottom Navigation */}
-      <MobileBottomNav
-        currentTab={currentTab}
-        onTabChange={setCurrentTab}
-        onOpenNewTransaction={handleOpenNewTransaction}
-      />
 
       {/* Modals & Overlays */}
       <PinLockModal />

@@ -10,6 +10,7 @@ export {
   putItems,
   deleteItems,
   clearAllFinancialEntities,
+  clearSampleDataFromIndexedDB,
   hasAnyDataInIndexedDB,
   type AllFinancialData,
   type StorageCollectionName,

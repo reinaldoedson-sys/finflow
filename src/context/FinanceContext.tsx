@@ -38,6 +38,7 @@ import {
   loadAllFinancialEntities,
   replaceCollection,
   clearAllFinancialEntities,
+  clearSampleDataFromIndexedDB,
 } from '../storage/indexedDB';
 import {
   IndexedDBTransactionRepository,
@@ -79,6 +80,7 @@ import {
   SyncStatus,
   PendingSyncOperation,
   SyncCollection,
+  isSampleDataDocument,
   enqueueOperation,
   dequeueOperation,
   loadPendingQueueFromStorage,
@@ -577,6 +579,30 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setSyncStatus('pending');
     setSyncError(null);
 
+    // Limpa da fila persistente Dexie quaisquer operações residuais de dados de exemplo
+    if (isIndexedDBAvailable()) {
+      try {
+        const queueItems = await db.syncQueue.toArray();
+        const sampleIds = queueItems
+          .filter(item => isSampleDataDocument(item.entityName, item.entityId))
+          .map(item => item.id);
+        if (sampleIds.length > 0) {
+          await db.syncQueue.bulkDelete(sampleIds);
+        }
+      } catch (err) {
+        console.warn('[FinanceContext] Erro ao limpar itens de exemplo da fila Dexie:', err);
+      }
+    }
+
+    // Limpa da fila em memória operações residuais de dados de exemplo
+    const cleanLegacyQueue = pendingQueueRef.current.filter(
+      op => !isSampleDataDocument(op.collection, op.docId)
+    );
+    if (cleanLegacyQueue.length !== pendingQueueRef.current.length) {
+      setPendingQueue(cleanLegacyQueue);
+      savePendingQueueToStorage(cleanLegacyQueue);
+    }
+
     let allSucceeded = true;
 
     // 1. Processa a fila persistente IndexedDB/Dexie através do FinancialSyncService (forçando retry)
@@ -730,7 +756,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const syncLocalToCloud = async () => {
     if (!effectiveUserId) return;
     await retrySync();
-    await demoDataService.seed(effectiveUserId, {
+    // Filtra dados para NUNCA semear contas/transações de teste na conta real da nuvem
+    const cleanDataset = demoDataService.filterSampleData({
       categories,
       accounts,
       creditCards,
@@ -742,6 +769,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       investments,
       investmentTransactions,
     });
+    await demoDataService.seed(effectiveUserId, cleanDataset);
   };
 
   // Derivados, Memos e Agregados Financeiros (extraído para useCalculatedTotals - Fase 4.2)
@@ -1458,7 +1486,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     });
 
     // Remove da fila pendente quaisquer operações relativas aos dados de demonstração
-    setPendingQueue(prev => prev.filter(op => !demoDataService.isSampleDataDocument(op.collection, op.docId)));
+    setPendingQueue(prev => {
+      const clean = prev.filter(op => !demoDataService.isSampleDataDocument(op.collection, op.docId));
+      savePendingQueueToStorage(clean);
+      return clean;
+    });
 
     localStorage.setItem(DEMO_CLEARED_KEY, 'true');
     localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
@@ -1472,6 +1504,28 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investments', JSON.stringify(filtered.investments));
     localStorage.setItem(STORAGE_KEY_PREFIX + 'investment_transactions', JSON.stringify(filtered.investmentTransactions));
 
+    // Remove do IndexedDB e da SyncQueue local qualquer resquício de dados de demonstração
+    if (isIndexedDBAvailable()) {
+      try {
+        await clearSampleDataFromIndexedDB();
+        await Promise.all([
+          replaceCollection('accounts', filtered.accounts),
+          replaceCollection('creditCards', filtered.creditCards),
+          replaceCollection('budgets', filtered.budgets),
+          replaceCollection('goals', filtered.goals),
+          replaceCollection('goalMovements', filtered.goalMovements),
+          replaceCollection('installmentPlans', filtered.installmentPlans),
+          replaceCollection('transactions', filtered.transactions),
+          replaceCollection('investments', filtered.investments),
+          replaceCollection('investmentTransactions', filtered.investmentTransactions),
+        ]);
+        const count = await db.syncQueue.count();
+        setDexieQueueCount(count);
+      } catch (idbErr) {
+        console.warn('[FinanceContext] Erro ao limpar dados de exemplo no IndexedDB:', idbErr);
+      }
+    }
+
     setAccounts(filtered.accounts);
     setCreditCards(filtered.creditCards);
     setBudgets(filtered.budgets);
@@ -1481,6 +1535,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions(filtered.transactions);
     setInvestments(filtered.investments);
     setInvestmentTransactions(filtered.investmentTransactions);
+
+    setSyncStatus('synced');
+    setSyncError(null);
   };
 
   const clearAllData = async () => {

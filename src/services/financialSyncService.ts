@@ -12,6 +12,8 @@ import type { ConflictResolver, VersionedEntity } from './conflictResolver';
 import type { CloudSyncProvider } from './providers/CloudSyncProvider';
 import { db, FinFlowDatabase } from '../storage/indexedDB/database';
 import { canPushItem } from '../domain/localOwnership';
+import { isSampleDataDocument } from '../domain/sync';
+import { recordResolvedConflictEntry, buildConflictLogEntry } from '../domain/conflictLog';
 import type {
   TransactionRepository,
   AccountRepository,
@@ -550,6 +552,20 @@ export class FinancialSyncService {
 
       if (resolution.divergenceDetected) {
         conflictsResolved++;
+        const kept = resolution.action === 'use_local' ? localItem : (resolution.resolvedItem || remoteItem);
+        const discarded = resolution.action === 'use_local' ? remoteItem : localItem;
+
+        const entry = buildConflictLogEntry(
+          entityName,
+          kept,
+          discarded,
+          {
+            entityId: remoteItem.id,
+            action: resolution.action,
+            reason: resolution.reason,
+          }
+        );
+        recordResolvedConflictEntry(entry);
       }
 
       if (resolution.action === 'mark_deleted') {
@@ -574,8 +590,26 @@ export class FinancialSyncService {
         itemsToSave.push(tombstoneItem);
       } else if (resolution.action === 'use_remote' || resolution.action === 'merge') {
         itemsToSave.push(resolution.resolvedItem || remoteItem);
+        // Garante que o aparelho que adota a versão remota não reenvie sua versão antiga da fila
+        const queueItemId = `${entityName}_${remoteItem.id}`;
+        await this.queue.dequeue(queueItemId).catch(() => {});
       } else if (resolution.action === 'use_local') {
-        // Preserva local (não sobrescreve)
+        // Se a versão local venceu uma divergência com a mesma revisão,
+        // garante que a versão vencedora esteja na fila para envio à nuvem
+        if (resolution.divergenceDetected && localItem) {
+          const queueItemId = `${entityName}_${remoteItem.id}`;
+          const existingInQueue = await this.queue.getItem(queueItemId);
+          if (!existingInQueue) {
+            await this.queue.enqueue({
+              operationId: `reconcile_${entityName}_${remoteItem.id}_${Date.now()}`,
+              entityName,
+              entityId: remoteItem.id,
+              action: 'update',
+              payload: localItem as object,
+              revision: localItem.revision || 1,
+            });
+          }
+        }
       }
     }
 
@@ -849,6 +883,7 @@ export class FinancialSyncService {
       entityId: tx.id,
       action: 'create',
       payload: tx,
+      revision: tx.revision || 1,
       dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
     });
 
@@ -937,6 +972,7 @@ export class FinancialSyncService {
       entityId: id,
       action: 'update',
       payload: updatedTx,
+      revision: updatedTx.revision || 1,
       dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
     });
 
@@ -1351,6 +1387,13 @@ export class FinancialSyncService {
         let processedInBatch = 0;
         for (const item of batch) {
           try {
+            // Se for item de exemplo/mock pré-carregado no dispositivo, descarta da fila sem erro
+            if (isSampleDataDocument(item.entityName, item.entityId)) {
+              await this.queue.dequeue(item.id);
+              processedInBatch++;
+              continue;
+            }
+
             const activeUid = this.cloud.getUserId?.();
 
             if (activeUid && !canPushItem(item.ownerUid, activeUid)) {

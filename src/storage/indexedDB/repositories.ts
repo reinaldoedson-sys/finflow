@@ -11,6 +11,17 @@ import type {
   Budget,
   Category,
 } from '../../types/finance';
+import {
+  SAMPLE_ACCOUNT_IDS,
+  SAMPLE_CARD_IDS,
+  SAMPLE_BUDGET_IDS,
+  SAMPLE_GOAL_IDS,
+  SAMPLE_GOAL_MOVEMENT_IDS,
+  SAMPLE_PLAN_IDS,
+  SAMPLE_TRANSACTION_IDS,
+  SAMPLE_INVESTMENT_IDS,
+  SAMPLE_INVESTMENT_TX_IDS,
+} from '../../utils/mockData';
 
 export interface AllFinancialData {
   transactions: Transaction[];
@@ -236,3 +247,69 @@ export async function hasAnyDataInIndexedDB(
     return false;
   }
 }
+
+/**
+ * Remove atomicamente todos os registros de exemplo das tabelas do IndexedDB e da SyncQueue.
+ * Preserva estritamente dados criados pelo usuário.
+ */
+export async function clearSampleDataFromIndexedDB(
+  database: FinFlowDatabase = db
+): Promise<boolean> {
+  try {
+    await database.transaction(
+      'rw',
+      [
+        database.transactions,
+        database.accounts,
+        database.creditCards,
+        database.investments,
+        database.investmentTransactions,
+        database.goals,
+        database.goalMovements,
+        database.installmentPlans,
+        database.budgets,
+        database.syncQueue,
+      ],
+      async () => {
+        await Promise.all([
+          database.transactions.bulkDelete(Array.from(SAMPLE_TRANSACTION_IDS)),
+          database.accounts.bulkDelete(Array.from(SAMPLE_ACCOUNT_IDS)),
+          database.creditCards.bulkDelete(Array.from(SAMPLE_CARD_IDS)),
+          database.investments.bulkDelete(Array.from(SAMPLE_INVESTMENT_IDS)),
+          database.investmentTransactions.bulkDelete(Array.from(SAMPLE_INVESTMENT_TX_IDS)),
+          database.goals.bulkDelete(Array.from(SAMPLE_GOAL_IDS)),
+          database.goalMovements.bulkDelete(Array.from(SAMPLE_GOAL_MOVEMENT_IDS)),
+          database.installmentPlans.bulkDelete(Array.from(SAMPLE_PLAN_IDS)),
+          database.budgets.bulkDelete(Array.from(SAMPLE_BUDGET_IDS)),
+        ]);
+
+        const queue = await database.syncQueue.toArray();
+        const sampleQueueIds = queue
+          .filter(q => {
+            const id = q.entityId;
+            return (
+              SAMPLE_ACCOUNT_IDS.has(id) ||
+              SAMPLE_CARD_IDS.has(id) ||
+              SAMPLE_TRANSACTION_IDS.has(id) ||
+              SAMPLE_INVESTMENT_IDS.has(id) ||
+              SAMPLE_INVESTMENT_TX_IDS.has(id) ||
+              SAMPLE_GOAL_IDS.has(id) ||
+              SAMPLE_GOAL_MOVEMENT_IDS.has(id) ||
+              SAMPLE_PLAN_IDS.has(id) ||
+              SAMPLE_BUDGET_IDS.has(id)
+            );
+          })
+          .map(q => q.id);
+
+        if (sampleQueueIds.length > 0) {
+          await database.syncQueue.bulkDelete(sampleQueueIds);
+        }
+      }
+    );
+    return true;
+  } catch (err) {
+    console.warn('[IndexedDB] Erro ao limpar dados de exemplo do IndexedDB:', err);
+    return false;
+  }
+}
+

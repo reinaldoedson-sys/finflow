@@ -10,7 +10,6 @@ import {
   LineChart, 
   Activity, 
   Settings, 
-  ShieldCheck, 
   PanelLeftClose, 
   PanelLeftOpen, 
   Plus, 
@@ -117,9 +116,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               showExpanded ? 'flex-1' : 'justify-center w-full'
             }`}
           >
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500/20 transition-colors shrink-0">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            </div>
+            <img
+              src="/pwa-192x192.png"
+              alt="FinFlow"
+              className="w-8 h-8 rounded-xl object-cover shrink-0 shadow-md shadow-cyan-500/10 group-hover:scale-105 transition-transform"
+            />
             {showExpanded && (
               <div className="flex flex-col truncate animate-in fade-in duration-200">
                 <span className="text-base font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors leading-tight">

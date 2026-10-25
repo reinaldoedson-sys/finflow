@@ -25,6 +25,38 @@ export interface VersionedEntity extends SyncMetadata {
 }
 
 /**
+ * Serializa uma entidade de forma canônica e determinística para desempate
+ * em casos de mesma revisão, excluindo carimbos de tempo, contadores de revisão
+ * e metadados de sincronização locais para garantir convergência idêntica e independente de relógio.
+ */
+export function canonicalizeEntityForTieBreak(item: Record<string, unknown> | null | undefined): string {
+  if (!item || typeof item !== 'object') return '';
+  const ignoredKeys = new Set([
+    'updatedAt',
+    'createdAt',
+    'revision',
+    'tombstoneRevision',
+    'deletedAt',
+    'pendingSync',
+    'lastPriceUpdate',
+    'userId',
+    'ownerUid',
+    'syncStatus',
+    'lastError',
+  ]);
+
+  const sortedKeys = Object.keys(item)
+    .filter(k => !ignoredKeys.has(k) && item[k] !== undefined)
+    .sort();
+
+  const normalized: Record<string, unknown> = {};
+  for (const k of sortedKeys) {
+    normalized[k] = item[k];
+  }
+  return JSON.stringify(normalized);
+}
+
+/**
  * Motor de Resolução de Conflitos Granular por Domínio.
  * Aplica regras específicas para Ledgers Financeiros (invioláveis),
  * Snapshots de Saldo/Fatura (LWW permitida) e Entidades Gerais (LWW com revisão).
@@ -118,7 +150,7 @@ export class ConflictResolver {
 
   /**
    * Estratégia para o Ledger Principal de Transações:
-   * Trata como ledger financeiro, evita sobrescrita silenciosa e preserva lançamentos.
+   * Trata como ledger financeiro, evita sobrescrita silenciosa e garante convergência entre aparelhos.
    */
   private resolveTransactionLedgerConflict<T extends VersionedEntity>(
     local: T,
@@ -127,7 +159,7 @@ export class ConflictResolver {
     const localRev = local.revision ?? 1;
     const remoteRev = remote.revision ?? 1;
 
-    // Se valores financeiros fundamentais (amount, type, date) divergem
+    // Se valores financeiros fundamentais (amount, type, date, accountId) divergem
     const financialMismatch =
       local.amount !== remote.amount ||
       local.type !== remote.type ||
@@ -150,37 +182,71 @@ export class ConflictResolver {
           reason: 'Conflito financeiro detectado: versão remota possui revisão mais recente.',
         };
       } else {
-        // Mesma revisão mas valores divergem: preservar o evento local para não sobrescrever silenciosamente
+        // Mesma revisão com divergência financeira: desempate determinístico canônico independente de relógio
+        const canonicalLocal = canonicalizeEntityForTieBreak(local as unknown as Record<string, unknown>);
+        const canonicalRemote = canonicalizeEntityForTieBreak(remote as unknown as Record<string, unknown>);
+
+        if (canonicalRemote > canonicalLocal) {
+          return {
+            action: 'use_remote',
+            resolvedItem: remote,
+            divergenceDetected: true,
+            reason: 'Divergência financeira com mesma revisão: versão remota venceu por desempate canônico determinístico.',
+          };
+        }
+
         return {
           action: 'use_local',
           resolvedItem: local,
           divergenceDetected: true,
-          reason: 'Divergência financeira com mesma revisão: preservando versão local do ledger.',
+          reason: 'Divergência financeira com mesma revisão: versão local venceu por desempate canônico determinístico.',
         };
       }
     }
 
     // Se valores financeiros são idênticos e apenas metadados (categoria, descrição) mudaram
-    if (localRev >= remoteRev) {
+    if (localRev > remoteRev) {
       return {
         action: 'use_local',
         resolvedItem: local,
         divergenceDetected: false,
-        reason: 'Transação com revisão local superior ou igual.',
+        reason: 'Transação com revisão local superior.',
+      };
+    }
+
+    if (remoteRev > localRev) {
+      return {
+        action: 'use_remote',
+        resolvedItem: remote,
+        divergenceDetected: false,
+        reason: 'Transação com revisão remota superior.',
+      };
+    }
+
+    // Mesma revisão sem divergência financeira: desempate determinístico canônico
+    const canonicalLocal = canonicalizeEntityForTieBreak(local as unknown as Record<string, unknown>);
+    const canonicalRemote = canonicalizeEntityForTieBreak(remote as unknown as Record<string, unknown>);
+
+    if (canonicalRemote > canonicalLocal) {
+      return {
+        action: 'use_remote',
+        resolvedItem: remote,
+        divergenceDetected: false,
+        reason: 'Transação com mesma revisão: versão remota venceu por desempate canônico determinístico.',
       };
     }
 
     return {
-      action: 'use_remote',
-      resolvedItem: remote,
+      action: 'use_local',
+      resolvedItem: local,
       divergenceDetected: false,
-      reason: 'Transação com revisão remota superior.',
+      reason: 'Transação com mesma revisão: versão local venceu por desempate canônico determinístico.',
     };
   }
 
   /**
    * Estratégia para Ledgers de Eventos (Investimentos e Metas):
-   * Preservação estrita do histórico de eventos sem perda de registros.
+   * Preservação estrita do histórico de eventos sem perda de registros com convergência determinística.
    */
   private resolveEventLedgerConflict<T extends VersionedEntity>(
     entityName: string,
@@ -190,20 +256,43 @@ export class ConflictResolver {
     const localRev = local.revision ?? 1;
     const remoteRev = remote.revision ?? 1;
 
-    if (localRev >= remoteRev) {
+    if (localRev > remoteRev) {
       return {
         action: 'use_local',
         resolvedItem: local,
-        divergenceDetected: localRev === remoteRev && local.amount !== remote.amount,
-        reason: `Histórico em ${entityName} preservado pela versão local.`,
+        divergenceDetected: false,
+        reason: `Histórico em ${entityName} preservado pela versão local com revisão superior.`,
+      };
+    }
+
+    if (remoteRev > localRev) {
+      return {
+        action: 'use_remote',
+        resolvedItem: remote,
+        divergenceDetected: false,
+        reason: `Histórico em ${entityName} atualizado pela revisão remota superior.`,
+      };
+    }
+
+    // Mesma revisão (localRev === remoteRev): desempate determinístico canônico
+    const canonicalLocal = canonicalizeEntityForTieBreak(local as unknown as Record<string, unknown>);
+    const canonicalRemote = canonicalizeEntityForTieBreak(remote as unknown as Record<string, unknown>);
+    const isDivergent = canonicalLocal !== canonicalRemote;
+
+    if (canonicalRemote > canonicalLocal) {
+      return {
+        action: 'use_remote',
+        resolvedItem: remote,
+        divergenceDetected: isDivergent,
+        reason: `Histórico em ${entityName} com mesma revisão: versão remota venceu por desempate canônico determinístico.`,
       };
     }
 
     return {
-      action: 'use_remote',
-      resolvedItem: remote,
-      divergenceDetected: local.amount !== remote.amount,
-      reason: `Histórico em ${entityName} atualizado pela revisão remota.`,
+      action: 'use_local',
+      resolvedItem: local,
+      divergenceDetected: isDivergent,
+      reason: `Histórico em ${entityName} com mesma revisão: versão local venceu por desempate canônico determinístico.`,
     };
   }
 

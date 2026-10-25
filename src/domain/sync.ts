@@ -272,8 +272,12 @@ export function mergeCloudWithPending<T extends { id: string }>(
   }
 
   // 2. Preserva criações e registros locais válidos que ainda não constam na nuvem
-  // Garante Local-First absoluto: entidades locais não são descartadas por snapshots remotos incompletos
+  // Garante Local-First absoluto: entidades locais reais não são descartadas por snapshots remotos incompletos
+  // Dados de demonstração pré-carregados no aparelho NUNCA são mesclados aos dados da nuvem
   for (const localItem of (localItems || [])) {
+    if (isSampleDataDocument(collection, localItem.id)) {
+      continue;
+    }
     const localRecord = localItem as unknown as SyncableRecord;
     if (!deleteIds.has(localItem.id) && !localRecord.deleted && !seenIds.has(localItem.id)) {
       const updatePayload = updatesMap.get(localItem.id);
@@ -288,6 +292,9 @@ export function mergeCloudWithPending<T extends { id: string }>(
 
   // 3. Se houver operações 'set' com payload na fila que ainda não constavam no array local nem na nuvem
   for (const op of relevantOps) {
+    if (isSampleDataDocument(op.collection, op.docId)) {
+      continue;
+    }
     if (op.type === 'set' && op.payload && !seenIds.has(op.docId) && !deleteIds.has(op.docId)) {
       result.push({ id: op.docId, ...op.payload } as T);
       seenIds.add(op.docId);

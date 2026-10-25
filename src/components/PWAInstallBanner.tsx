@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, X, CheckCircle, Sparkles } from 'lucide-react';
+import { Download, X, CheckCircle, Sparkles } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -99,9 +99,11 @@ export const PWAInstallBanner: React.FC = () => {
     <div className="p-3.5 sm:p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-cyan-950/30 border border-emerald-500/30 shadow-lg mb-5 flex flex-col gap-3 text-xs">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-            <Smartphone className="w-5 h-5" />
-          </div>
+          <img
+            src="/pwa-192x192.png"
+            alt="FinFlow"
+            className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-md shadow-emerald-500/20 border border-slate-700/50"
+          />
           <div>
             <div className="flex items-center gap-1.5 font-bold text-white text-sm">
               <span>Instalar FinFlow no Celular</span>
