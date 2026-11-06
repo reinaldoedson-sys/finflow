@@ -51,12 +51,14 @@ export const InvestmentDetailModal: React.FC<InvestmentDetailModalProps> = ({
   const { 
     investmentTransactions, 
     deleteInvestmentTransaction,
+    deleteInvestment,
     refreshInvestmentQuotes,
     isRefreshingQuotes 
   } = useFinance();
   const { hideValues } = useSecurity();
 
   const [activeTab, setActiveTab] = useState<'all' | 'buys' | 'sells' | 'dividends'>('buys');
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   // Posição efetiva derivada do ledger (ou fallback legado seguro)
   const derivedPos = useMemo(() => {
@@ -171,14 +173,28 @@ export const InvestmentDetailModal: React.FC<InvestmentDetailModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => onOpenAporte(asset.id)}
-              className="px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/40 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+              className="px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/40 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
               title="Fazer um novo aporte neste ativo"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Novo Aporte</span>
+              <span className="hidden sm:inline">Novo Aporte</span>
+            </button>
+            <button
+              onClick={() => onEditAsset(asset)}
+              className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-colors cursor-pointer"
+              title="Editar dados do ativo"
+            >
+              <Edit3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setIsConfirmingDelete(true)}
+              className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-rose-400 bg-slate-800/80 hover:bg-rose-500/20 transition-colors cursor-pointer"
+              title="Excluir ativo da carteira"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
             <button
               onClick={onClose}
@@ -188,6 +204,35 @@ export const InvestmentDetailModal: React.FC<InvestmentDetailModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Confirmation banner if user wants to delete asset */}
+        {isConfirmingDelete && (
+          <div className="p-3 bg-rose-500/15 border-b border-rose-500/30 flex items-center justify-between gap-3 text-xs">
+            <span className="text-rose-200">
+              Deseja realmente excluir <strong>{asset.ticker}</strong> da carteira?
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(false)}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsConfirmingDelete(false);
+                  await deleteInvestment(asset.id);
+                  onClose();
+                }}
+                className="px-2.5 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 text-white font-bold shadow-xs"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Modal Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
@@ -452,9 +497,7 @@ export const InvestmentDetailModal: React.FC<InvestmentDetailModalProps> = ({
                         ) : (
                           <button
                             onClick={() => {
-                              if (window.confirm('Deseja realmente excluir esta operação do histórico?')) {
-                                deleteInvestmentTransaction(tx.id);
-                              }
+                              deleteInvestmentTransaction(tx.id);
                             }}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                             title="Excluir operação do histórico"

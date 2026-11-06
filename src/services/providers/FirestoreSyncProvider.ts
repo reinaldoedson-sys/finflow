@@ -249,7 +249,7 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
         ...(tombstone.reason ? { reason: tombstone.reason } : {}),
       };
 
-      // Tenta updateDoc para registrar o tombstone; se documento não existir, usa setDoc com merge
+      // Tenta updateDoc para registrar o tombstone; se documento não existir, considera sucesso
       try {
         await updateDoc(docRef, tombstonePayload);
       } catch (err: unknown) {
@@ -257,11 +257,20 @@ export class FirestoreSyncProvider implements CloudSyncProvider {
           ? (err as { code?: string }).code
           : undefined;
         if (code === 'not-found') {
-          await setDoc(docRef, tombstonePayload, { merge: true });
+          // Documento não existe ou já foi removido no Firestore
+          return {
+            success: true,
+            serverRevision: tombstone.tombstoneRevision,
+          };
         } else {
-          // Se as regras de segurança rejeitarem campos adicionais em updateDoc (ou exigirem doc completo),
-          // faz fallback seguro para setDoc com merge: true
-          await setDoc(docRef, tombstonePayload, { merge: true });
+          // Tenta deleteDoc direto se updateDoc falhar por incompatibilidade de schema
+          try {
+            const { deleteDoc } = await import('firebase/firestore');
+            await deleteDoc(docRef);
+          } catch {
+            // Se falhar, tenta setDoc com merge como última tentativa
+            await setDoc(docRef, tombstonePayload, { merge: true });
+          }
         }
       }
 

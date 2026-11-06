@@ -251,12 +251,7 @@ const getInitialData = <T,>(key: string, defaultValue: T): T => {
 
     const stored = localStorage.getItem(STORAGE_KEY_PREFIX + key);
     if (stored !== null) {
-      const parsed = JSON.parse(stored);
-      if (!isDemoCleared && key === 'investments' && Array.isArray(parsed) && parsed.length === 0) {
-        localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(defaultValue));
-        return defaultValue;
-      }
-      return parsed;
+      return JSON.parse(stored);
     }
 
     if (!isDemoCleared) {
@@ -1239,6 +1234,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const deleteInvestment = async (id: string) => {
     await investmentAppService.deleteAsset(id, investmentTransactions);
     setInvestments(prev => prev.filter(inv => inv.id !== id));
+    setInvestmentTransactions(prev => prev.filter(t => t.assetId !== id));
   };
 
   const loadSampleInvestments = async () => {

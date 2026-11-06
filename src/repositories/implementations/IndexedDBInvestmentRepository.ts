@@ -26,9 +26,15 @@ export class IndexedDBInvestmentRepository implements InvestmentRepository {
       lastPriceUpdate,
       notes,
       createdAt,
+      sector,
+      deleted,
+      deletedAt,
+      tombstoneRevision,
+      revision,
+      updatedAt,
     } = asset;
 
-    return {
+    const sanitized: InvestmentAsset = {
       id,
       ticker,
       name,
@@ -45,6 +51,15 @@ export class IndexedDBInvestmentRepository implements InvestmentRepository {
       notes,
       createdAt,
     };
+
+    if (sector !== undefined) sanitized.sector = sector;
+    if (deleted !== undefined) sanitized.deleted = deleted;
+    if (deletedAt !== undefined) sanitized.deletedAt = deletedAt;
+    if (tombstoneRevision !== undefined) sanitized.tombstoneRevision = tombstoneRevision;
+    if (revision !== undefined) sanitized.revision = revision;
+    if (updatedAt !== undefined) sanitized.updatedAt = updatedAt;
+
+    return sanitized;
   }
 
   // =========================================================================

@@ -86,6 +86,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
   const [selectedAporteAssetId, setSelectedAporteAssetId] = useState<string | null>(null);
   const [selectedDetailAsset, setSelectedDetailAsset] = useState<InvestmentAsset | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [assetToDelete, setAssetToDelete] = useState<InvestmentAsset | null>(null);
 
   const [isRetryingSync, setIsRetryingSync] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
@@ -704,9 +705,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(`Deseja realmente remover o ativo ${asset.ticker} da sua carteira?`)) {
-                            deleteInvestment(asset.id);
-                          }
+                          setAssetToDelete(asset);
                         }}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 bg-slate-800/80 hover:bg-rose-500/20 transition-all cursor-pointer"
                         title="Excluir ativo da carteira"
@@ -755,6 +754,51 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
         onOpenAporte={(assetId) => handleOpenAporte(assetId)}
         onEditAsset={(asset) => onEditInvestment(asset)}
       />
+
+      {/* Modal de Confirmação de Exclusão de Ativo */}
+      {assetToDelete && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setAssetToDelete(null)}
+        >
+          <div 
+            className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-800 p-5 shadow-2xl space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Excluir {assetToDelete.ticker}?</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Remover o ativo <strong className="text-slate-200">{assetToDelete.name || assetToDelete.ticker}</strong> da carteira?
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setAssetToDelete(null)}
+                className="flex-1 py-2.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const id = assetToDelete.id;
+                  setAssetToDelete(null);
+                  await deleteInvestment(id);
+                }}
+                className="flex-1 py-2.5 text-xs font-bold rounded-xl bg-rose-500 hover:bg-rose-400 text-white shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                Excluir Ativo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

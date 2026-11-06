@@ -111,11 +111,8 @@ export class InvestmentApplicationService {
     }
 
     const activeLinked = linkedTxs.filter(t => t.assetId === id && !t.deleted);
-    if (activeLinked.length > 0) {
-      console.warn(
-        `[InvestmentApplicationService] Ativo ${id} possui ${activeLinked.length} transações vinculadas. ` +
-        `Preservando histórico contábil e aplicando soft delete.`
-      );
+    for (const tx of activeLinked) {
+      await this.syncService.deleteInvestmentTransaction(tx.id, undefined, 'asset_deleted');
     }
 
     await this.syncService.deleteInvestmentAsset(id);
