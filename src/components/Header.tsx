@@ -40,6 +40,7 @@ const tabTitles: Record<string, string> = {
   budgets: 'Orçamentos',
   goals: 'Metas Financeiras',
   reports: 'Relatórios',
+  analytics: 'Análises',
   settings: 'Configurações',
 };
 
@@ -213,15 +214,15 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Quick CTA: Nova Transação - 40x40px touchable square on mobile (< md), button with label on desktop */}
+          {/* Quick CTA: Nova Transação - oculto no mobile (< md) pois agora fica na barra inferior fixa; visível no desktop (md+) */}
           <button
             onClick={onOpenNewTransaction}
-            className="w-10 h-10 min-w-10 min-h-10 md:w-auto md:h-auto p-0 md:px-3.5 md:py-1.5 flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg shadow-sm shadow-emerald-500/20 transition-all whitespace-nowrap active:scale-95 cursor-pointer shrink-0"
+            className="hidden md:flex md:w-auto md:h-auto md:px-3.5 md:py-1.5 items-center justify-center gap-1.5 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg shadow-sm shadow-emerald-500/20 transition-all whitespace-nowrap active:scale-95 cursor-pointer shrink-0"
             title="Nova Transação (N)"
             aria-label="Nova Transação"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span className="hidden md:inline">Nova Transação</span>
+            <span>Nova Transação</span>
           </button>
         </div>
       </div>

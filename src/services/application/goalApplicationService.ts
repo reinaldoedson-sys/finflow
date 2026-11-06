@@ -2,6 +2,7 @@ import { generateId } from '../../domain/id';
 import { resolveGoalInitialAmount, calculateGoalBalance } from '../../domain/calculations';
 import type { FinancialSyncService } from '../financialSyncService';
 import type { FinancialGoal, GoalMovement, GoalMovementType } from '../../types/finance';
+import { todayLocalISO } from '../../utils/localDate';
 
 export type CreateGoalDTO = Omit<FinancialGoal, 'id' | 'currentAmount'>;
 export type UpdateGoalDTO = Partial<FinancialGoal>;
@@ -168,7 +169,7 @@ export class GoalApplicationService {
     const isWithdrawal = amount < 0;
     const type: GoalMovementType = isWithdrawal ? 'withdrawal' : 'deposit';
     const absAmount = Math.abs(amount);
-    const movDate = date || new Date().toISOString().split('T')[0];
+    const movDate = date || todayLocalISO();
 
     return this.addMovement(
       {

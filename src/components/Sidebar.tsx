@@ -19,7 +19,8 @@ import {
   Lock,
   Cloud,
   LogIn,
-  LogOut
+  LogOut,
+  AreaChart
 } from 'lucide-react';
 import { useSecurity } from '../context/SecurityContext';
 import { useFinance } from '../context/FinanceContext';
@@ -75,6 +76,7 @@ const navSections: NavSection[] = [
     title: 'Análise',
     items: [
       { id: 'reports', label: 'Relatórios', icon: BarChart3 },
+      { id: 'analytics', label: 'Análises', icon: AreaChart },
     ],
   },
   {

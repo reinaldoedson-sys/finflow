@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { PaymentMethod } from '../types/finance';
 import { formatCurrency } from '../utils/currency';
+import { todayLocalISO } from '../utils/localDate';
 import { 
   X, 
   Calendar, 
@@ -37,7 +38,7 @@ export const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onCl
   const [accountId, setAccountId] = useState('');
   const [creditCardId, setCreditCardId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('credit_card');
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(() => todayLocalISO());
   const [error, setError] = useState('');
 
   // Inline quick account creation if user has no accounts
@@ -74,7 +75,7 @@ export const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onCl
       setTotalAmountStr('');
       setInstallmentsCountStr('10');
       setCalcMode('by_installment');
-      setStartDate(new Date().toISOString().split('T')[0]);
+      setStartDate(todayLocalISO());
       setError('');
       setShowQuickAccount(false);
 

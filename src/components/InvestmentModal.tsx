@@ -3,6 +3,7 @@ import { useFinance } from '../context/FinanceContext';
 import { InvestmentAsset, AssetClass } from '../types/finance';
 import { POPULAR_TICKERS, fetchMarketQuotes, guessAssetSector, STOCK_SECTORS, FII_SEGMENTS } from '../services/marketQuotes';
 import { formatCurrency } from '../utils/currency';
+import { todayLocalISO } from '../utils/localDate';
 import { 
   calculateInvestmentCost, 
   calculateInvestmentValue, 
@@ -181,7 +182,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
             await addInvestmentTransaction({
               assetId: newId,
               type: 'buy',
-              date: new Date().toISOString().split('T')[0],
+              date: todayLocalISO(),
               quantity: parsedQty,
               price: parsedAvgPrice,
               totalAmount: Math.round(parsedQty * parsedAvgPrice * 100) / 100,

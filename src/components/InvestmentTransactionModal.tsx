@@ -3,6 +3,7 @@ import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { InvestmentTransactionType } from '../types/finance';
 import { formatCurrency, formatDateShort } from '../utils/currency';
+import { todayLocalISO } from '../utils/localDate';
 import { 
   calculateTransactionTotal, 
   validateInvestmentTransaction 
@@ -43,7 +44,7 @@ export const InvestmentTransactionModal: React.FC<InvestmentTransactionModalProp
   const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('');
   const [type, setType] = useState<InvestmentTransactionType>('buy');
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => todayLocalISO());
   const [quantityStr, setQuantityStr] = useState<string>('');
   const [priceStr, setPriceStr] = useState<string>('');
   const [totalAmountStr, setTotalAmountStr] = useState<string>('');
@@ -61,7 +62,7 @@ export const InvestmentTransactionModal: React.FC<InvestmentTransactionModalProp
       setSelectedAssetId(defaultAssetId);
       setFilterAssetId(initialAssetId || 'all');
       setType('buy');
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(todayLocalISO());
       setQuantityStr('');
       setPriceStr('');
       setTotalAmountStr('');

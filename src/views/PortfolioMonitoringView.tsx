@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { formatCurrency } from '../utils/currency';
+import { todayLocalISO } from '../utils/localDate';
 import { InvestmentAsset, AssetClass } from '../types/finance';
 import { 
   calculatePortfolioMonitoring, 
@@ -151,7 +152,7 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `finflow_carteira_investimentos_${activeCurrency}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `finflow_carteira_investimentos_${activeCurrency}_${todayLocalISO()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

@@ -54,7 +54,7 @@ function main(): void {
     const child = spawnSync(tsxExec, [relPath], {
       cwd: rootDir,
       encoding: 'utf8',
-      env: { ...process.env, FORCE_COLOR: '1' }
+      env: { ...process.env, FORCE_COLOR: '1', TZ: 'America/Sao_Paulo' }
     });
     const durationMs = Date.now() - startTime;
     const passed = child.status === 0;

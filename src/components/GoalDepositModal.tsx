@@ -3,6 +3,7 @@ import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { FinancialGoal } from '../types/finance';
 import { formatCurrency, formatDateShort } from '../utils/currency';
+import { todayLocalISO } from '../utils/localDate';
 import { X, PlusCircle, MinusCircle, History, Trash2, Calendar, FileText } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -22,7 +23,7 @@ export const GoalDepositModal: React.FC<GoalDepositModalProps> = ({
   const [amountStr, setAmountStr] = useState('');
   const [mode, setMode] = useState<'deposit' | 'withdraw'>('deposit');
   const [notes, setNotes] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => todayLocalISO());
   const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState('');
 

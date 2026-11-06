@@ -72,6 +72,7 @@ import {
   MonthCommitment
 } from '../domain/calculations';
 import { calculateInstallmentSchedule } from '../domain/installments';
+import { todayLocalISO } from '../utils/localDate';
 import { DerivedInvestmentPosition } from '../domain/investmentPosition';
 import { useCalculatedTotals } from '../hooks/useCalculatedTotals';
 import { useOwnershipGuard } from '../hooks/useOwnershipGuard';
@@ -1123,7 +1124,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       plan.startDate
     );
     const newTransactions: Transaction[] = [];
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = todayLocalISO();
 
     for (const item of schedule) {
       const txId = `tx-${planId}-${item.number}`;

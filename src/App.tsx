@@ -1,9 +1,10 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { AuthProvider } from './context/AuthContext';
-import { SecurityProvider } from './context/SecurityContext';
+import { SecurityProvider, useSecurity } from './context/SecurityContext';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
+import { BottomNav } from './components/BottomNav';
 import { PinLockModal } from './components/PinLockModal';
 import { TransactionModal } from './components/TransactionModal';
 import { AccountModal } from './components/AccountModal';
@@ -17,6 +18,8 @@ import { InvestmentModal } from './components/InvestmentModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { UpdateBanner } from './components/UpdateBanner';
 import { SampleDataBanner } from './components/SampleDataBanner';
+import { useTabHistory } from './hooks/useTabHistory';
+import { tabFromHash } from './domain/tabRouting';
 
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
@@ -28,6 +31,8 @@ import { GoalsView } from './views/GoalsView';
 import { InstallmentsView } from './views/InstallmentsView';
 import { ReportsView } from './views/ReportsView';
 import { SettingsView } from './views/SettingsView';
+
+const AnalyticsView = React.lazy(() => import('./views/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
 
 const ViewLoadingFallback: React.FC = () => (
   <div className="flex items-center justify-center min-h-[40vh] py-16 animate-in fade-in duration-150">
@@ -41,6 +46,7 @@ const ViewLoadingFallback: React.FC = () => (
 import { Transaction, Account, CreditCard, FinancialGoal, InvestmentAsset } from './types/finance';
 
 const FinFlowApp: React.FC = () => {
+  const { isLocked } = useSecurity();
   const {
     goals,
     isOwnershipConflict,
@@ -48,7 +54,16 @@ const FinFlowApp: React.FC = () => {
     cancelConflictLogout
   } = useFinance();
 
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  // Inicializa a aba diretamente pelo hash da URL para evitar piscar o Início
+  const [currentTab, setCurrentTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return tabFromHash(window.location.hash);
+    }
+    return 'dashboard';
+  });
+
+  // Hook que sincroniza a navegação com a History API do navegador
+  const navigateToTab = useTabHistory(currentTab, setCurrentTab);
 
   // Sidebar expanded / collapsed state (persisted)
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(() => {
@@ -94,6 +109,21 @@ const FinFlowApp: React.FC = () => {
   const [budgetInitialAmount, setBudgetInitialAmount] = useState<number | undefined>(undefined);
 
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+
+  // Monitora se qualquer modal, gaveta mobile ou bloqueio está ativo
+  const anyOverlayOpen = Boolean(
+    isTxModalOpen ||
+    isAccountModalOpen ||
+    isGoalModalOpen ||
+    isGoalDepositModalOpen ||
+    isBudgetModalOpen ||
+    isInstallmentModalOpen ||
+    isInvestmentModalOpen ||
+    isBackupModalOpen ||
+    isOwnershipConflict ||
+    isMobileNavOpen ||
+    isLocked
+  );
 
   // Global hotkeys
   useEffect(() => {
@@ -195,7 +225,7 @@ const FinFlowApp: React.FC = () => {
       {/* Sidebar Expansível (Desktop persistent + Mobile off-canvas drawer) */}
       <Sidebar
         currentTab={currentTab}
-        onTabChange={setCurrentTab}
+        onTabChange={navigateToTab}
         onOpenNewTransaction={handleOpenNewTransaction}
         isExpanded={isSidebarExpanded}
         onToggleExpanded={() => setIsSidebarExpanded(prev => !prev)}
@@ -208,16 +238,16 @@ const FinFlowApp: React.FC = () => {
         {/* Top Bar Navigation */}
         <Header
           currentTab={currentTab}
-          onTabChange={setCurrentTab}
+          onTabChange={navigateToTab}
           onOpenNewTransaction={handleOpenNewTransaction}
-          onOpenSettings={() => setCurrentTab('settings')}
+          onOpenSettings={() => navigateToTab('settings')}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
           isSidebarExpanded={isSidebarExpanded}
           onToggleSidebar={() => setIsSidebarExpanded(prev => !prev)}
         />
 
-        {/* Main View Area */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-6 sm:pb-8 min-w-0 overflow-x-clip">
+        {/* Main View Area (com pb-24 no mobile para não sobrepor a barra de navegação inferior fixa) */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-24 md:pb-8 min-w-0 overflow-x-clip">
           <UpdateBanner />
           <PWAInstallBanner />
           <SampleDataBanner />
@@ -229,7 +259,7 @@ const FinFlowApp: React.FC = () => {
                 onOpenBudgetModal={handleOpenBudgetModal}
                 onOpenDepositModal={handleOpenDepositModal}
                 onSelectTransactionToEdit={handleEditTransaction}
-                onNavigateToTab={setCurrentTab}
+                onNavigateToTab={navigateToTab}
               />
             )}
 
@@ -253,7 +283,7 @@ const FinFlowApp: React.FC = () => {
               <PortfolioMonitoringView
                 onOpenNewInvestment={handleOpenNewInvestment}
                 onEditInvestment={handleEditInvestment}
-                onNavigateToInvestments={() => setCurrentTab('investments')}
+                onNavigateToInvestments={() => navigateToTab('investments')}
               />
             )}
 
@@ -261,7 +291,7 @@ const FinFlowApp: React.FC = () => {
               <InvestmentsView
                 onOpenNewInvestment={handleOpenNewInvestment}
                 onEditInvestment={handleEditInvestment}
-                onNavigateToPortfolio={() => setCurrentTab('portfolio')}
+                onNavigateToPortfolio={() => navigateToTab('portfolio')}
               />
             )}
 
@@ -289,6 +319,10 @@ const FinFlowApp: React.FC = () => {
               <ReportsView />
             )}
 
+            {currentTab === 'analytics' && (
+              <AnalyticsView />
+            )}
+
             {currentTab === 'settings' && (
               <SettingsView
                 onOpenBackupModal={() => setIsBackupModalOpen(true)}
@@ -297,8 +331,8 @@ const FinFlowApp: React.FC = () => {
           </Suspense>
         </main>
 
-        {/* Footer */}
-        <footer className="mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 text-center text-xs text-slate-500">
+        {/* Footer (oculto no mobile abaixo de md, visível apenas no desktop) */}
+        <footer className="hidden md:block mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 text-center text-xs text-slate-500">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <img src="/pwa-192x192.png" alt="FinFlow" className="w-4 h-4 rounded object-cover shadow-sm" />
@@ -315,6 +349,16 @@ const FinFlowApp: React.FC = () => {
           </div>
         </footer>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (md:hidden, desmontada quando qualquer modal ou gaveta estiver aberta) */}
+      {!anyOverlayOpen && (
+        <BottomNav
+          currentTab={currentTab}
+          onTabChange={navigateToTab}
+          onOpenNewTransaction={handleOpenNewTransaction}
+          onOpenMore={() => setIsMobileNavOpen(true)}
+        />
+      )}
 
       {/* Modals & Overlays */}
       <PinLockModal />

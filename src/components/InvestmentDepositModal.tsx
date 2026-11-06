@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { formatCurrency } from '../utils/currency';
+import { todayLocalISO } from '../utils/localDate';
 import { calculateAportePosition } from '../domain/investments';
 import { calculateTransactionTotal } from '../domain/investmentTransactions';
 import { 
@@ -39,7 +40,7 @@ export const InvestmentDepositModal: React.FC<InvestmentDepositModalProps> = ({
   const [quantityStr, setQuantityStr] = useState<string>('');
   const [priceStr, setPriceStr] = useState<string>('');
   const [totalAmountStr, setTotalAmountStr] = useState<string>('');
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => todayLocalISO());
   const [debitFromAccount, setDebitFromAccount] = useState<boolean>(false);
   const [sourceAccountId, setSourceAccountId] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
@@ -55,7 +56,7 @@ export const InvestmentDepositModal: React.FC<InvestmentDepositModalProps> = ({
       setSubmissionKey(Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 7));
       const defaultId = initialAssetId || (investments.length > 0 ? investments[0].id : '');
       setSelectedAssetId(defaultId);
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(todayLocalISO());
       setNotes('');
       setDebitFromAccount(false);
       setSourceAccountId(accounts.length > 0 ? accounts[0].id : '');

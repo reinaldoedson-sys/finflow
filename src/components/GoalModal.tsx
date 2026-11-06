@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { FinancialGoal } from '../types/finance';
+import { toLocalISODate } from '../utils/localDate';
 import { X } from 'lucide-react';
 
 interface GoalModalProps {
@@ -35,7 +36,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
       setTargetAmountStr('');
       const defaultDate = new Date();
       defaultDate.setMonth(defaultDate.getMonth() + 6);
-      setTargetDate(defaultDate.toISOString().split('T')[0]);
+      setTargetDate(toLocalISODate(defaultDate));
       setNotes('');
       setColor('#10b981');
     }

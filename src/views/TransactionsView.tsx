@@ -3,6 +3,7 @@ import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { Transaction, TransactionType } from '../types/finance';
 import { formatCurrency, formatDateShort, getMonthLabel } from '../utils/currency';
+import { todayLocalISO } from '../utils/localDate';
 import { 
   Search, 
   Filter, 
@@ -128,7 +129,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     addTransaction({
       ...rest,
       description: `${tx.description} (Cópia)`,
-      date: new Date().toISOString().split('T')[0]
+      date: todayLocalISO()
     });
   };
 
@@ -157,7 +158,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `finflow-transacoes-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `finflow-transacoes-${todayLocalISO()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

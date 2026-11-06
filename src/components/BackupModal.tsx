@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { X, Shield, Download, Upload, CheckCircle2, AlertTriangle, Key } from 'lucide-react';
+import { todayLocalISO } from '../utils/localDate';
 
 interface BackupModalProps {
   isOpen: boolean;
@@ -36,7 +37,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
       const blob = new Blob([backupString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const dateStr = new Date().toISOString().split('T')[0];
+      const dateStr = todayLocalISO();
       link.href = url;
       link.download = `finflow-backup-${encryptExport ? 'encrypted-' : ''}${dateStr}.json`;
       document.body.appendChild(link);
