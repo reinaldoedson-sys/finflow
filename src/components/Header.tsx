@@ -3,7 +3,7 @@ import { useSecurity } from '../context/SecurityContext';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
 import { preloadFirebase } from '../firebaseLoader';
-import { getMonthLabel } from '../utils/currency';
+import { getMonthLabel, getMonthLabelShort } from '../utils/currency';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -59,28 +59,28 @@ export const Header: React.FC<HeaderProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   return (
-    <header className="sticky top-0 z-20 bg-[#0d131f]/95 backdrop-blur-md border-b border-slate-800/80 px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 shrink-0">
-      <div className="flex items-center justify-between gap-2 sm:gap-4">
+    <header className="sticky top-0 z-20 bg-[#0d131f]/95 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-4 lg:px-6 py-2 sm:py-3 shrink-0">
+      <div className="flex items-center justify-between gap-1.5 sm:gap-4 min-w-0">
         
         {/* Left Section: Mobile Hamburger or Desktop Sidebar Toggle + Page Title */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Hamburger button for mobile (< md) */}
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink">
+          {/* Hamburger button for mobile (< md): min 40x40px touchable */}
           <button
             onClick={onOpenMobileNav}
             aria-label="Abrir menu de navegação lateral"
-            className="md:hidden p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="md:hidden w-10 h-10 min-w-10 min-h-10 flex items-center justify-center p-0 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <Menu className="w-4 h-4" />
           </button>
 
-          {/* Mobile Brand (visible only < md) */}
-          <div className="flex md:hidden items-center gap-2">
+          {/* Mobile Brand: logo icon only on mobile < sm to save space; text hidden on mobile */}
+          <div className="flex md:hidden items-center gap-1.5 shrink-0">
             <img
               src="/pwa-192x192.png"
               alt="FinFlow"
               className="w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
             />
-            <span className="text-base font-extrabold tracking-tight text-white">
+            <span className="hidden sm:inline text-sm font-extrabold tracking-tight text-white">
               FinFlow
             </span>
           </div>
@@ -104,28 +104,31 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Section: Month Selector, Privacy, PIN Lock, Auth & Quick CTA */}
         <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 shrink-0">
-          {/* Month Selector Carousel */}
-          <div className="flex items-center bg-slate-900/90 border border-slate-800 rounded-lg p-0.5 text-xs text-slate-300">
+          {/* Month Selector Carousel: Compact "Nov/26" on mobile, full on desktop */}
+          <div className="flex items-center bg-slate-900/90 border border-slate-800 rounded-lg p-0.5 text-xs text-slate-300 shrink-0">
             <button
               onClick={goToPreviousMonth}
               title="Mês anterior"
+              aria-label="Mês anterior"
               className="p-1 sm:p-1.5 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
-            <span className="px-1.5 sm:px-2 font-medium font-mono text-[11px] lg:text-xs text-slate-200 whitespace-nowrap min-w-[75px] sm:min-w-[100px] text-center truncate">
-              {getMonthLabel(selectedMonth)}
+            <span className="px-1 sm:px-2 font-medium font-mono text-[11px] lg:text-xs text-slate-200 whitespace-nowrap min-w-[52px] sm:min-w-[100px] text-center">
+              <span className="md:hidden">{getMonthLabelShort(selectedMonth)}</span>
+              <span className="hidden md:inline">{getMonthLabel(selectedMonth)}</span>
             </span>
             <button
               onClick={goToNextMonth}
               title="Próximo mês"
+              aria-label="Próximo mês"
               className="p-1 sm:p-1.5 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Privacy Toggle */}
+          {/* Privacy Toggle (hidden on mobile, available in Sidebar) */}
           <button
             onClick={toggleHideValues}
             title={hideValues ? 'Exibir valores (P)' : 'Ocultar valores por privacidade (P)'}
@@ -138,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
             {hideValues ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
 
-          {/* Lock App Button */}
+          {/* Lock App Button (hidden on mobile, available in Sidebar) */}
           {isPinEnabled && (
             <button
               onClick={lockApp}
@@ -149,8 +152,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Cloud Sync & Google Auth */}
-          <div className="flex items-center">
+          {/* Cloud Sync & Google Auth (hidden on mobile < md, completely accessible in Sidebar) */}
+          <div className="hidden md:flex items-center">
             {currentUser ? (
               <div className="relative">
                 <button
@@ -210,14 +213,15 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Quick CTA: Nova Transação */}
+          {/* Quick CTA: Nova Transação - 40x40px touchable square on mobile (< md), button with label on desktop */}
           <button
             onClick={onOpenNewTransaction}
-            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg shadow-sm shadow-emerald-500/20 transition-all whitespace-nowrap active:scale-95 cursor-pointer shrink-0"
+            className="w-10 h-10 min-w-10 min-h-10 md:w-auto md:h-auto p-0 md:px-3.5 md:py-1.5 flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg shadow-sm shadow-emerald-500/20 transition-all whitespace-nowrap active:scale-95 cursor-pointer shrink-0"
             title="Nova Transação (N)"
+            aria-label="Nova Transação"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span className="hidden sm:inline">Nova Transação</span>
+            <span className="hidden md:inline">Nova Transação</span>
           </button>
         </div>
       </div>

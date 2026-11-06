@@ -204,7 +204,7 @@ const FinFlowApp: React.FC = () => {
       />
 
       {/* Main Content Column */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-x-clip">
         {/* Top Bar Navigation */}
         <Header
           currentTab={currentTab}
@@ -217,7 +217,7 @@ const FinFlowApp: React.FC = () => {
         />
 
         {/* Main View Area */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-6 sm:pb-8">
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-6 sm:pb-8 min-w-0 overflow-x-clip">
           <UpdateBanner />
           <PWAInstallBanner />
           <SampleDataBanner />

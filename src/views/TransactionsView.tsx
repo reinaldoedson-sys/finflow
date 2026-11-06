@@ -18,6 +18,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { getPaymentMethodLabel } from '../domain/paymentMethods';
 
 interface TransactionsViewProps {
   onOpenNewTransaction: () => void;
@@ -455,7 +456,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                     {/* Action icons row on mobile */}
                     <div className="flex items-center justify-between pt-1 border-t border-slate-800/40 text-[11px] text-slate-500">
                       <div className="flex items-center gap-1.5 text-[10px]">
-                        {tx.paymentMethod && <span className="uppercase font-mono text-slate-400">{tx.paymentMethod}</span>}
+                        {tx.paymentMethod && <span className="text-slate-400 font-medium">{getPaymentMethodLabel(tx.paymentMethod)}</span>}
                         {tx.tags && tx.tags.length > 0 && <span>#{tx.tags.join(' #')}</span>}
                       </div>
 

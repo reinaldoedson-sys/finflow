@@ -60,3 +60,17 @@ export function calculateInstallmentSchedule(
     amount
   }));
 }
+
+/**
+ * Calcula a data prevista de término de um parcelamento baseando-se exclusivamente
+ * nos dados do plano (startDate e totalInstallments).
+ * Para 1 parcela ou valores não positivos, devolve a própria data de início.
+ * Não depende de quais transações estão carregadas em memória.
+ */
+export function getInstallmentPlanEndDate(plan: { startDate: string; totalInstallments: number }): string {
+  if (!plan || !plan.startDate) return '';
+  if (!plan.totalInstallments || plan.totalInstallments <= 1) {
+    return plan.startDate;
+  }
+  return calculateInstallmentDate(plan.startDate, plan.totalInstallments - 1);
+}

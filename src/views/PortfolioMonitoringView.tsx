@@ -262,7 +262,7 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
         {/* 4 CARDS PRINCIPAIS EXATOS DA PLANILHA DO USUÁRIO */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-1">
           {/* Card 1: CAPITAL INVESTIDO */}
-          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/90 relative overflow-hidden">
+          <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/50 border border-slate-800/90 relative overflow-hidden">
             <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
               <Coins className="w-3.5 h-3.5 text-blue-400" />
               <span>Capital Investido</span>
@@ -270,14 +270,14 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
             <div className="text-lg sm:text-2xl font-black font-mono text-white">
               {formatCurrency(summary.totalInvestedCost, activeCurrency, hideValues)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+            <div className="text-[11px] text-slate-500 mt-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-1">
               <span>Custo total de compra</span>
               <span className="font-mono text-slate-400">{summary.assetRows.length} ativos</span>
             </div>
           </div>
 
           {/* Card 2: CAPITAL ATUAL */}
-          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/90 relative overflow-hidden">
+          <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/50 border border-slate-800/90 relative overflow-hidden">
             <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
               <Landmark className="w-3.5 h-3.5 text-emerald-400" />
               <span>Capital Atual</span>
@@ -285,14 +285,14 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
             <div className="text-lg sm:text-2xl font-black font-mono text-emerald-300">
               {formatCurrency(summary.totalCurrentValue, activeCurrency, hideValues)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+            <div className="text-[11px] text-slate-500 mt-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-1">
               <span>Valor a mercado</span>
               <span className="font-mono text-emerald-400/90 font-semibold">100% da carteira</span>
             </div>
           </div>
 
           {/* Card 3: LUCRO NÃO REALIZADO */}
-          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/90 relative overflow-hidden">
+          <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/50 border border-slate-800/90 relative overflow-hidden">
             <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
               {summary.totalUnrealizedProfit >= 0 ? (
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
@@ -307,7 +307,7 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
               {summary.totalUnrealizedProfit >= 0 ? '+' : ''}
               {formatCurrency(summary.totalUnrealizedProfit, activeCurrency, hideValues)}
             </div>
-            <div className="text-[11px] font-mono font-bold mt-1 flex items-center justify-between">
+            <div className="text-[11px] font-mono font-bold mt-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-1">
               <span className="text-slate-500 font-sans font-normal">Valorização</span>
               <span className={summary.unrealizedProfitPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
                 {summary.unrealizedProfitPercent >= 0 ? '+' : ''}{summary.unrealizedProfitPercent.toFixed(2)}%
@@ -316,7 +316,7 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
           </div>
 
           {/* Card 4: LUCRO REALIZADO */}
-          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/90 relative overflow-hidden">
+          <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/50 border border-slate-800/90 relative overflow-hidden">
             <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
               <DollarSign className="w-3.5 h-3.5 text-amber-400" />
               <span>Lucro Realizado</span>
@@ -327,7 +327,7 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
               {summary.totalRealizedProfit >= 0 ? '+' : ''}
               {formatCurrency(summary.totalRealizedProfit, activeCurrency, hideValues)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+            <div className="text-[11px] text-slate-500 mt-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-1">
               <span>Vendas executadas</span>
               <span className="font-mono text-slate-400">
                 Proventos: {formatCurrency(summary.totalDividends, activeCurrency, hideValues)}

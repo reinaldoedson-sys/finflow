@@ -277,3 +277,5 @@ export function calculateFutureCommitments(
 
   return result;
 }
+
+export { countMonthTransactions } from './transactions';

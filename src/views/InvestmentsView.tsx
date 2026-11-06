@@ -373,7 +373,7 @@ export const InvestmentsView: React.FC<InvestmentsViewProps> = ({
                     <div className="text-lg font-black font-mono text-white">
                       {formatCurrency(s.totalValue, curr, hideValues)}
                     </div>
-                    <div className="text-[11px] flex items-center justify-between gap-2 mt-1 text-slate-400">
+                    <div className="text-[11px] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mt-1 text-slate-400">
                       <span>Custo: {formatCurrency(s.totalCost, curr, hideValues)}</span>
                       <span className={`font-mono font-semibold ${s.profitLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {s.profitLoss >= 0 ? '+' : ''}{formatCurrency(s.profitLoss, curr, hideValues)} ({s.profitLossPercent >= 0 ? '+' : ''}{s.profitLossPercent.toFixed(2)}%)

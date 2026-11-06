@@ -51,6 +51,16 @@ export function getMonthLabel(monthString: string): string {
   return `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} de ${year}`;
 }
 
+export function getMonthLabelShort(monthString: string): string {
+  if (!monthString) return '';
+  const [year, month] = monthString.split('-').map(Number);
+  const date = new Date(year, month - 1, 1);
+  const shortMonth = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+  const capitalized = shortMonth.charAt(0).toUpperCase() + shortMonth.slice(1);
+  const shortYear = String(year).slice(-2);
+  return `${capitalized}/${shortYear}`;
+}
+
 export function getPreviousMonth(monthString: string): string {
   const [year, month] = monthString.split('-').map(Number);
   if (month === 1) {

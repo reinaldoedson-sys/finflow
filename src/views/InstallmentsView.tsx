@@ -12,6 +12,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { getInstallmentPlanEndDate } from '../domain/installments';
 
 interface InstallmentsViewProps {
   onOpenNewInstallment: () => void;
@@ -56,9 +57,8 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
       // Current month installment if any
       const monthTx = planTxs.find(t => t.date.startsWith(selectedMonth));
 
-      // Calculate last installment date (approx or from tx)
+      // Calculate last installment date from plan definition (independent of loaded transactions)
       const sortedTxs = [...planTxs].sort((a, b) => a.date.localeCompare(b.date));
-      const lastTx = sortedTxs[sortedTxs.length - 1];
 
       return {
         plan,
@@ -70,7 +70,7 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
         remainingAmount,
         remainingCount,
         monthTx,
-        endDate: lastTx ? lastTx.date : plan.startDate,
+        endDate: getInstallmentPlanEndDate(plan),
         isCompleted: remainingCount === 0 && paidCount > 0
       };
     });
@@ -118,36 +118,42 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
           </button>
         </div>
 
-        {/* 3 KPI Cards - Compact on mobile */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-800/80">
-          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
-            <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
-              Saldo Devedor
-            </span>
-            <div className="text-xs sm:text-xl font-bold font-mono text-rose-400 truncate">
+        {/* 3 KPI Cards - 1 column on mobile (< sm), 3 columns on tablet/desktop (>= sm) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-800/80">
+          <div className="p-3 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800 flex sm:flex-col justify-between sm:justify-start items-center sm:items-start gap-1">
+            <div>
+              <span className="text-[10px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1">
+                Saldo Devedor
+              </span>
+              <span className="text-[11px] text-slate-500 hidden sm:block">Comprometido em compras parceladas</span>
+            </div>
+            <div className="text-sm sm:text-xl font-bold font-mono text-rose-400 whitespace-nowrap">
               {formatCurrency(totalRemainingDebt, currency, hideValues)}
             </div>
-            <span className="text-[11px] text-slate-500 hidden sm:block">Comprometido em compras parceladas</span>
           </div>
 
-          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
-            <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
-              Parcelas no Mês
-            </span>
-            <div className="text-xs sm:text-xl font-bold font-mono text-white truncate">
+          <div className="p-3 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800 flex sm:flex-col justify-between sm:justify-start items-center sm:items-start gap-1">
+            <div>
+              <span className="text-[10px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1">
+                Parcelas no Mês
+              </span>
+              <span className="text-[11px] text-slate-500 hidden sm:block">Impacto na fatura deste mês</span>
+            </div>
+            <div className="text-sm sm:text-xl font-bold font-mono text-white whitespace-nowrap">
               {formatCurrency(totalCurrentMonthInstallments, currency, hideValues)}
             </div>
-            <span className="text-[11px] text-slate-500 hidden sm:block">Impacto na fatura deste mês</span>
           </div>
 
-          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800">
-            <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
-              Ativos
-            </span>
-            <div className="text-xs sm:text-xl font-bold font-mono text-emerald-400 truncate">
+          <div className="p-3 sm:p-3.5 rounded-xl bg-slate-800/30 border border-slate-800 flex sm:flex-col justify-between sm:justify-start items-center sm:items-start gap-1">
+            <div>
+              <span className="text-[10px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1">
+                Ativos
+              </span>
+              <span className="text-[11px] text-slate-500 hidden sm:block">Em processo de quitação mensal</span>
+            </div>
+            <div className="text-sm sm:text-xl font-bold font-mono text-emerald-400 whitespace-nowrap">
               {activePlansCount} compras
             </div>
-            <span className="text-[11px] text-slate-500 hidden sm:block">Em processo de quitação mensal</span>
           </div>
         </div>
       </div>
@@ -359,7 +365,7 @@ export const InstallmentsView: React.FC<InstallmentsViewProps> = ({ onOpenNewIns
                 {isExpanded && (
                   <div className="mt-4 pt-3 border-t border-slate-800 space-y-2">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-2">
-                      Detalhamento das Parcelas ({planTxs.length})
+                      Detalhamento das Parcelas ({planTxs.length < plan.totalInstallments ? `${planTxs.length} de ${plan.totalInstallments}` : plan.totalInstallments})
                     </span>
                     <div className="divide-y divide-slate-800/60 max-h-56 overflow-y-auto pr-1">
                       {planTxs.map((tx, idx) => (
