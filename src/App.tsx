@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { SecurityProvider } from './context/SecurityContext';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
@@ -19,15 +19,15 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { SampleDataBanner } from './components/SampleDataBanner';
 
 import { DashboardView } from './views/DashboardView';
-const TransactionsView = lazy(() => import('./views/TransactionsView').then(m => ({ default: m.TransactionsView })));
-const AccountsView = lazy(() => import('./views/AccountsView').then(m => ({ default: m.AccountsView })));
-const InvestmentsView = lazy(() => import('./views/InvestmentsView').then(m => ({ default: m.InvestmentsView })));
-const PortfolioMonitoringView = lazy(() => import('./views/PortfolioMonitoringView').then(m => ({ default: m.PortfolioMonitoringView })));
-const BudgetsView = lazy(() => import('./views/BudgetsView').then(m => ({ default: m.BudgetsView })));
-const GoalsView = lazy(() => import('./views/GoalsView').then(m => ({ default: m.GoalsView })));
-const InstallmentsView = lazy(() => import('./views/InstallmentsView').then(m => ({ default: m.InstallmentsView })));
-const ReportsView = lazy(() => import('./views/ReportsView').then(m => ({ default: m.ReportsView })));
-const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
+import { TransactionsView } from './views/TransactionsView';
+import { AccountsView } from './views/AccountsView';
+import { InvestmentsView } from './views/InvestmentsView';
+import { PortfolioMonitoringView } from './views/PortfolioMonitoringView';
+import { BudgetsView } from './views/BudgetsView';
+import { GoalsView } from './views/GoalsView';
+import { InstallmentsView } from './views/InstallmentsView';
+import { ReportsView } from './views/ReportsView';
+import { SettingsView } from './views/SettingsView';
 
 const ViewLoadingFallback: React.FC = () => (
   <div className="flex items-center justify-center min-h-[40vh] py-16 animate-in fade-in duration-150">

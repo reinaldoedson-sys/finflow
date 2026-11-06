@@ -14,7 +14,8 @@ import {
   Clock, 
   Check, 
   Layers, 
-  Sparkles
+  Sparkles,
+  Calendar
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
 
@@ -48,9 +49,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>('all');
   const [installmentFilter, setInstallmentFilter] = useState<'current_month' | 'all' | 'none'>('current_month');
+  const [periodFilter, setPeriodFilter] = useState<'month' | 'all'>('month');
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
+      // Period filter: default is 'month' so only transactions of the selected month appear
+      if (periodFilter === 'month' && !t.date.startsWith(selectedMonth)) {
+        return false;
+      }
+
       // Search text
       if (search.trim()) {
         const query = search.toLowerCase();
@@ -76,19 +83,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       // Status filter
       if (statusFilter !== 'all' && t.status !== statusFilter) return false;
 
-      // Installment filter: default is 'current_month' so future/past installments don't clutter the transactions view
+      // Installment filter
       const isInstallment = !!(t.installmentPlanId || t.installments || /\(\d+\/\d+\)/.test(t.description));
       if (isInstallment) {
-        if (installmentFilter === 'current_month') {
-          if (!t.date.startsWith(selectedMonth)) return false;
-        } else if (installmentFilter === 'none') {
+        if (installmentFilter === 'none') {
           return false;
+        }
+        if (periodFilter === 'all' && installmentFilter === 'current_month') {
+          if (!t.date.startsWith(selectedMonth)) return false;
         }
       }
 
       return true;
     });
-  }, [transactions, search, typeFilter, categoryFilter, accountFilter, statusFilter, installmentFilter, selectedMonth]);
+  }, [transactions, search, typeFilter, categoryFilter, accountFilter, statusFilter, installmentFilter, periodFilter, selectedMonth]);
 
   // Count installments hidden because they belong to other months
   const hiddenFutureInstallmentsCount = useMemo(() => {
@@ -199,6 +207,19 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Filtros:</span>
           </div>
 
+          {/* Period selector */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-md px-2 py-0.5">
+            <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <select
+              value={periodFilter}
+              onChange={(e) => setPeriodFilter(e.target.value as 'month' | 'all')}
+              className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer"
+            >
+              <option value="month">Mês: {getMonthLabel(selectedMonth)}</option>
+              <option value="all">Todos os meses</option>
+            </select>
+          </div>
+
           {/* Type selector */}
           <select
             value={typeFilter}
@@ -292,7 +313,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       </div>
 
       {/* Clean View Notification Banner */}
-      {installmentFilter === 'current_month' && hiddenFutureInstallmentsCount > 0 && (
+      {periodFilter === 'all' && installmentFilter === 'current_month' && hiddenFutureInstallmentsCount > 0 && (
         <div className="flex items-center justify-between p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
@@ -317,7 +338,18 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       <div className="rounded-xl bg-slate-900/50 border border-slate-800/80 overflow-hidden shadow-sm">
         {filteredTransactions.length === 0 ? (
           <div className="py-16 text-center text-xs text-slate-400">
-            Nenhuma transação encontrada para os filtros selecionados.{' '}
+            Nenhuma transação encontrada {periodFilter === 'month' ? `em ${getMonthLabel(selectedMonth)}` : ''} para os filtros selecionados.{' '}
+            {periodFilter === 'month' && (
+              <>
+                <button
+                  onClick={() => setPeriodFilter('all')}
+                  className="text-emerald-400 underline font-medium ml-1 mr-1"
+                >
+                  Ver todos os meses
+                </button>
+                <span>·</span>
+              </>
+            )}
             <button
               onClick={() => {
                 setSearch('');
@@ -325,6 +357,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 setCategoryFilter('all');
                 setAccountFilter('all');
                 setStatusFilter('all');
+                setPeriodFilter('month');
                 setInstallmentFilter('current_month');
               }}
               className="text-emerald-400 underline font-medium ml-1"

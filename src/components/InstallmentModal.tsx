@@ -11,7 +11,9 @@ import {
   AlertCircle,
   Sparkles,
   Layers,
-  Coins
+  Coins,
+  Plus,
+  Minus
 } from 'lucide-react';
 
 interface InstallmentModalProps {
@@ -29,7 +31,8 @@ export const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onCl
   const [description, setDescription] = useState('');
   const [installmentAmountStr, setInstallmentAmountStr] = useState('');
   const [totalAmountStr, setTotalAmountStr] = useState('');
-  const [installmentsCount, setInstallmentsCount] = useState<number>(10);
+  const [installmentsCountStr, setInstallmentsCountStr] = useState<string>('10');
+  const installmentsCount = parseInt(installmentsCountStr, 10) || 0;
   const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState('');
   const [creditCardId, setCreditCardId] = useState('');
@@ -69,7 +72,7 @@ export const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onCl
       setDescription('');
       setInstallmentAmountStr('');
       setTotalAmountStr('');
-      setInstallmentsCount(10);
+      setInstallmentsCountStr('10');
       setCalcMode('by_installment');
       setStartDate(new Date().toISOString().split('T')[0]);
       setError('');
@@ -148,9 +151,9 @@ export const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onCl
     }
   };
 
-  const handleCountChange = (count: number) => {
+  const applyCount = (count: number) => {
     const validCount = Math.max(2, Math.min(120, count || 2));
-    setInstallmentsCount(validCount);
+    setInstallmentsCountStr(String(validCount));
     if (calcMode === 'by_installment') {
       const inst = parseNum(installmentAmountStr);
       if (inst > 0) {
@@ -163,6 +166,42 @@ export const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onCl
         const inst = Math.round((tot / validCount) * 100) / 100;
         setInstallmentAmountStr(formatNum(inst));
       }
+    }
+  };
+
+  const handleCountInputChange = (rawVal: string) => {
+    const digits = rawVal.replace(/\D/g, '');
+    if (digits === '') {
+      setInstallmentsCountStr('');
+      return;
+    }
+    const num = parseInt(digits, 10);
+    const clamped = num > 120 ? 120 : num;
+    setInstallmentsCountStr(String(clamped));
+
+    if (clamped >= 2) {
+      if (calcMode === 'by_installment') {
+        const inst = parseNum(installmentAmountStr);
+        if (inst > 0) {
+          const tot = Math.round(inst * clamped * 100) / 100;
+          setTotalAmountStr(formatNum(tot));
+        }
+      } else {
+        const tot = parseNum(totalAmountStr);
+        if (tot > 0) {
+          const inst = Math.round((tot / clamped) * 100) / 100;
+          setInstallmentAmountStr(formatNum(inst));
+        }
+      }
+    }
+  };
+
+  const handleCountBlur = () => {
+    const num = parseInt(installmentsCountStr, 10);
+    if (isNaN(num) || num < 2) {
+      applyCount(2);
+    } else if (num > 120) {
+      applyCount(120);
     }
   };
 
@@ -434,18 +473,48 @@ export const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onCl
               <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
                 Quantidade de Parcelas
               </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="2"
-                  max="120"
-                  value={installmentsCount}
-                  onChange={(e) => handleCountChange(parseInt(e.target.value) || 2)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold font-mono text-white focus:outline-none focus:border-emerald-500"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">
-                  vezes
-                </span>
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cur = parseInt(installmentsCountStr, 10) || 2;
+                    applyCount(Math.max(2, cur - 1));
+                  }}
+                  disabled={installmentsCount <= 2}
+                  className="w-10 h-[38px] flex items-center justify-center rounded-l-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white border-y border-l border-slate-800 transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer shrink-0"
+                  title="Diminuir 1 parcela"
+                  aria-label="Diminuir parcela"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={installmentsCountStr}
+                    onChange={(e) => handleCountInputChange(e.target.value)}
+                    onBlur={handleCountBlur}
+                    placeholder="10"
+                    className="w-full text-center px-4 py-2 bg-slate-900 border-y border-slate-800 text-sm font-bold font-mono text-white focus:outline-none focus:border-emerald-500 focus:z-10 h-[38px]"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-semibold pointer-events-none">
+                    x
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cur = parseInt(installmentsCountStr, 10) || 2;
+                    applyCount(Math.min(120, cur + 1));
+                  }}
+                  disabled={installmentsCount >= 120}
+                  className="w-10 h-[38px] flex items-center justify-center rounded-r-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white border-y border-r border-slate-800 transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer shrink-0"
+                  title="Aumentar 1 parcela"
+                  aria-label="Aumentar parcela"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
 
@@ -489,8 +558,8 @@ export const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onCl
                   <button
                     key={n}
                     type="button"
-                    onClick={() => handleCountChange(n)}
-                    className={`px-2.5 py-1 text-xs font-mono font-semibold rounded-lg transition-all ${
+                    onClick={() => applyCount(n)}
+                    className={`px-2.5 py-1 text-xs font-mono font-semibold rounded-lg transition-all cursor-pointer ${
                       isActive
                         ? 'bg-emerald-500 text-slate-950 shadow-sm'
                         : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white'
