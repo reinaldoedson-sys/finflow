@@ -20,6 +20,7 @@ import {
   LineChart
 } from 'lucide-react';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { DueAlertsBanner } from '../components/DueAlertsBanner';
 import { Transaction } from '../types/finance';
 import { countMonthTransactions } from '../domain/transactions';
 
@@ -146,6 +147,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
       )}
+
+      {/* Lembretes de Vencimentos Próximos (Faturas e Contas a Vencer) */}
+      <DueAlertsBanner
+        creditCards={creditCards}
+        transactions={transactions}
+        currency={currency}
+        hideValues={hideValues}
+        onNavigateToTab={onNavigateToTab}
+        onPayTransaction={toggleTransactionStatus}
+      />
 
       {/* Mobile Compact KPI Card (< sm) */}
       <div className="sm:hidden p-3.5 rounded-2xl bg-gradient-to-br from-slate-900 via-[#0e1628] to-slate-900 border border-slate-800/90 shadow-xl space-y-3">

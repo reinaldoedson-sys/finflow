@@ -29,6 +29,7 @@ import {
   ResolvedConflictEntry,
   formatConflictSnapshotText
 } from '../domain/conflictLog';
+import { isHapticsEnabled, setHapticsEnabled, triggerHaptic } from '../utils/haptics';
 
 interface NavigatorWithStandalone extends Navigator {
   standalone?: boolean;
@@ -72,6 +73,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
   // Wipe device confirmation modal state
   const [showWipeModal, setShowWipeModal] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
+
+  // Haptic feedback state
+  const [hapticsActive, setHapticsActive] = useState<boolean>(() => isHapticsEnabled());
 
   const handleConfirmWipe = async () => {
     setIsWiping(true);
@@ -737,6 +741,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
               }`}
             >
               {hideValues ? 'Ocultos' : 'Visíveis'}
+            </button>
+          </div>
+
+          {/* Haptic feedback toggle */}
+          <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
+            <div className="flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-slate-400" />
+              <div>
+                <p className="text-xs font-semibold text-slate-200">Feedback Tátil (Vibração)</p>
+                <p className="text-[11px] text-slate-400">
+                  Microvibrações ao digitar PIN, trocar de abas e salvar lançamentos em celulares compatíveis.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const next = !hapticsActive;
+                setHapticsActive(next);
+                setHapticsEnabled(next);
+                if (next) triggerHaptic('medium');
+              }}
+              className={`px-3 py-1 text-xs font-semibold rounded-md border transition-all ${
+                hapticsActive
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+            >
+              {hapticsActive ? 'Ativo' : 'Desativado'}
             </button>
           </div>
         </div>

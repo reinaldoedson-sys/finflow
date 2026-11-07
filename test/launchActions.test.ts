@@ -65,6 +65,15 @@ function runTests() {
       '?acao=nova-receita&utm_source=pwa reconhece income'
     );
 
+    // ?acao=compartilhar com texto de PIX
+    const shareAction = parseLaunchAction('?acao=compartilhar&texto=Pagamento+PIX+R%24+85%2C00+para+Mercado+Central&titulo=Comprovante');
+    assert(shareAction !== null && shareAction.kind === 'shared-content', 'parseLaunchAction reconhece acao=compartilhar');
+    if (shareAction && shareAction.kind === 'shared-content') {
+      assert(shareAction.type === 'expense', 'Tipo compartilhado é expense');
+      assert(shareAction.amount === 85.0, `Valor extraído 85.0 (obtido: ${shareAction.amount})`);
+      assert(shareAction.description === 'Mercado Central', `Descrição extraída: "${shareAction.description}"`);
+    }
+
     // Valores desconhecidos ou inválidos
     assert(parseLaunchAction('?acao=outro') === null, '?acao=outro devolve null');
     assert(parseLaunchAction('?outro=1') === null, '?outro=1 devolve null');
@@ -92,6 +101,12 @@ function runTests() {
     assert(
       removeLaunchParams('/', '?foo=1&acao=nova-despesa&bar=2', '') === '/?foo=1&bar=2',
       'remove acao preservando outros parâmetros: ("/", "?foo=1&acao=nova-despesa&bar=2", "") -> "/?foo=1&bar=2"'
+    );
+
+    // Remove parâmetros de compartilhamento (acao, texto, titulo, link)
+    assert(
+      removeLaunchParams('/', '?acao=compartilhar&texto=teste&titulo=comp&utm=1', '#/transacoes') === '/?utm=1#/transacoes',
+      'remove parâmetros de compartilhamento (acao, texto, titulo) preservando outros'
     );
 
     // Preserva hash

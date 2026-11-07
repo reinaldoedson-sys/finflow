@@ -10,6 +10,7 @@ import {
   getPrefillFromDescription 
 } from '../domain/quickEntry';
 import { CategoryIcon } from './CategoryIcon';
+import { triggerHaptic } from '../utils/haptics';
 import { 
   X, 
   ArrowDownRight, 
@@ -30,13 +31,21 @@ interface TransactionModalProps {
   onClose: () => void;
   editTransaction?: Transaction | null;
   initialType?: 'expense' | 'income';
+  initialDescription?: string;
+  initialAmount?: number;
+  initialDate?: string;
+  initialNotes?: string;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   isOpen,
   onClose,
   editTransaction,
-  initialType = 'expense'
+  initialType = 'expense',
+  initialDescription,
+  initialAmount,
+  initialDate,
+  initialNotes
 }) => {
   const { 
     transactions,
@@ -114,12 +123,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setIsRecurring(!!editTransaction.isRecurring);
       setIsInstallment(false);
     } else {
-      // Default new transaction values com getQuickDefaults
+      // Default new transaction values com getQuickDefaults e pré-preenchimento
       const targetType: TransactionType = initialType || 'expense';
       setType(targetType);
-      setDescription('');
-      setAmountStr('');
-      setNotes('');
+      setDescription(initialDescription || '');
+      setAmountStr(initialAmount && initialAmount > 0 ? formatNum(initialAmount) : '');
+      setNotes(initialNotes || '');
       setTagsInput('');
       setIsRecurring(false);
       setStatus('completed');
@@ -128,8 +137,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setInstallmentAmountStr('');
       setInstallmentsCount(10);
       setShowAllCategories(false);
-      setShowCustomDate(false);
-      setShowDetails(false);
+      setShowCustomDate(Boolean(initialDate));
+      setShowDetails(Boolean(initialNotes));
 
       // Padrões rápidos inteligentes
       const defaults = getQuickDefaults(transactions, accounts, creditCards, targetType, categories);
@@ -142,16 +151,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         setTargetAccountId(accounts[1].id);
       }
 
-      // Default date to today, or first of selected month if looking at another month
+      // Default date to initialDate, or today, or first of selected month if looking at another month
       const today = todayLocalISO();
-      if (today.startsWith(selectedMonth)) {
+      if (initialDate) {
+        setDate(initialDate);
+      } else if (today.startsWith(selectedMonth)) {
         setDate(today);
       } else {
         setDate(`${selectedMonth}-01`);
       }
     }
     setError('');
-  }, [editTransaction, isOpen, accounts, categories, creditCards, selectedMonth, transactions, initialType]);
+  }, [editTransaction, isOpen, accounts, categories, creditCards, selectedMonth, transactions, initialType, initialDescription, initialAmount, initialDate, initialNotes]);
 
   // Derived effective values for installment
   const parsedSingleAmount = parseNum(amountStr);
@@ -331,6 +342,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         startDate: date || todayLocalISO()
       });
 
+      triggerHaptic('success');
+
       if (keepOpen) {
         setAmountStr('');
         setDescription('');
@@ -387,6 +400,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     } else {
       addTransaction(payload);
     }
+
+    triggerHaptic('success');
 
     if (keepOpen) {
       setAmountStr('');

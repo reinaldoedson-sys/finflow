@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSecurity } from '../context/SecurityContext';
 import { Shield, Delete, AlertCircle, Lock } from 'lucide-react';
+import { triggerHaptic } from '../utils/haptics';
 
 function formatRemainingTime(seconds: number): string {
   if (seconds < 60) {
@@ -56,6 +57,7 @@ export const PinLockModal: React.FC = () => {
   const handleKeyPress = useCallback((digit: string) => {
     if (isBlocked) return;
     if (pin.length < 4) {
+      triggerHaptic('light');
       setPin(prev => prev + digit);
       setError(false);
     }
@@ -63,12 +65,14 @@ export const PinLockModal: React.FC = () => {
 
   const handleDelete = useCallback(() => {
     if (isBlocked) return;
+    triggerHaptic('light');
     setPin(prev => prev.slice(0, -1));
     setError(false);
   }, [isBlocked]);
 
   const handleClear = useCallback(() => {
     if (isBlocked) return;
+    triggerHaptic('light');
     setPin('');
     setError(false);
   }, [isBlocked]);
@@ -98,8 +102,11 @@ export const PinLockModal: React.FC = () => {
       unlockWithPin(pin).then((success) => {
         setIsVerifying(false);
         if (!success) {
+          triggerHaptic('error');
           setError(true);
           setPin('');
+        } else {
+          triggerHaptic('success');
         }
       });
     }

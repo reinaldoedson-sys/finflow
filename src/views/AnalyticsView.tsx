@@ -22,6 +22,7 @@ import {
 import { SparklineChart } from '../components/charts/SparklineChart';
 import { GroupedBarChart, GroupedBarMode } from '../components/charts/GroupedBarChart';
 import { SmoothLineChart } from '../components/charts/SmoothLineChart';
+import { CategoryBreakdownSection } from '../components/analytics/CategoryBreakdownSection';
 
 // Constantes de cores do painel (conforme diretrizes)
 const COLOR_INCOME = '#10b981'; // receitas esmeralda
@@ -40,7 +41,15 @@ const MONTH_NAMES_FULL = [
 ];
 
 export const AnalyticsView: React.FC = () => {
-  const { transactions, currency, selectedMonth: headerMonth, setSelectedMonth: setGlobalMonth } = useFinance();
+  const { 
+    transactions, 
+    categories, 
+    accounts, 
+    creditCards, 
+    currency, 
+    selectedMonth: headerMonth, 
+    setSelectedMonth: setGlobalMonth 
+  } = useFinance();
   const { hideValues } = useSecurity();
 
   const todayStr = useMemo(() => todayLocalISO(), []);
@@ -518,6 +527,18 @@ export const AnalyticsView: React.FC = () => {
               ariaLabel={`Curvas suaves de receitas e despesas mês a mês de ${selectedYear}`}
             />
           </div>
+
+          {/* Gráfico 3 & Detalhamento: Rosca e Ranking de Categorias + Maiores Gastos */}
+          <CategoryBreakdownSection
+            transactions={transactions}
+            categories={categories}
+            accounts={accounts}
+            creditCards={creditCards}
+            year={selectedYear}
+            month={selectedMonth}
+            currency={currency}
+            hideValues={hideValues}
+          />
         </div>
       </div>
     </div>

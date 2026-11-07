@@ -129,7 +129,17 @@ export default defineConfig(() => {
                 }
               ]
             }
-          ]
+          ],
+          share_target: {
+            action: '/?acao=compartilhar',
+            method: 'GET',
+            enctype: 'application/x-www-form-urlencoded',
+            params: {
+              title: 'titulo',
+              text: 'texto',
+              url: 'link'
+            }
+          }
         },
         workbox: {
           cleanupOutdatedCaches: true,

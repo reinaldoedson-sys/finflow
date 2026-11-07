@@ -3,6 +3,8 @@ import {
   computeMonthlySeries,
   computePeriodTotals,
   isProjectedMonth,
+  computeCategoryBreakdown,
+  getTopTransactions,
 } from '../src/domain/analytics';
 import { computeMonthlySummary, computeAccounts, computeCreditCards } from '../src/domain/aggregates';
 import { Transaction, Account, CreditCard } from '../src/types/finance';
@@ -306,6 +308,108 @@ async function runAnalyticsTests() {
       nonePastProjected,
       'Ano passado (2025) NUNCA é previsto para nenhum dos 12 meses'
     );
+  }
+
+  // =========================================================================
+  // 6. computeCategoryBreakdown
+  // =========================================================================
+  console.log('\n--- 6. Testando computeCategoryBreakdown ---');
+  {
+    const mockCategories = [
+      { id: 'cat-moradia', name: 'Moradia', icon: 'Home', color: '#f43f5e' },
+      { id: 'cat-mercado', name: 'Alimentação / Mercado', icon: 'ShoppingBag', color: '#10b981' },
+      { id: 'cat-transporte', name: 'Transporte', icon: 'Car', color: '#0ea5e9' },
+      { id: 'cat-salario', name: 'Salário', icon: 'Briefcase', color: '#10b981' },
+      { id: 'cat-freela', name: 'Freelance', icon: 'Sparkles', color: '#6366f1' },
+    ];
+
+    const sampleTxs: Transaction[] = [
+      // 2026-03
+      { id: 't1', description: 'Aluguel', amount: 2000, type: 'expense', categoryId: 'cat-moradia', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-05', status: 'completed', createdAt: '2026-03-05' },
+      { id: 't2', description: 'Condomínio', amount: 500, type: 'expense', categoryId: 'cat-moradia', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-10', status: 'completed', createdAt: '2026-03-10' },
+      { id: 't3', description: 'Feira', amount: 300, type: 'expense', categoryId: 'cat-mercado', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-12', status: 'completed', createdAt: '2026-03-12' },
+      { id: 't4', description: 'Supermercado', amount: 700, type: 'expense', categoryId: 'cat-mercado', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-20', status: 'completed', createdAt: '2026-03-20' },
+      { id: 't5', description: 'Combustível', amount: 500, type: 'expense', categoryId: 'cat-transporte', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-22', status: 'completed', createdAt: '2026-03-22' },
+      // Pendente: deve ser ignorado
+      { id: 't6', description: 'Pendente', amount: 1000, type: 'expense', categoryId: 'cat-moradia', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-25', status: 'pending', createdAt: '2026-03-25' },
+      // Excluída: deve ser ignorada
+      { id: 't7', description: 'Excluída', amount: 800, type: 'expense', categoryId: 'cat-moradia', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-26', status: 'completed', deleted: true, createdAt: '2026-03-26' },
+      // Outro mês (Abril 2026)
+      { id: 't8', description: 'Aluguel Abril', amount: 2000, type: 'expense', categoryId: 'cat-moradia', accountId: 'a1', paymentMethod: 'pix', date: '2026-04-05', status: 'completed', createdAt: '2026-04-05' },
+      // Receitas em Março 2026
+      { id: 't9', description: 'Salário Março', amount: 6000, type: 'income', categoryId: 'cat-salario', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-05', status: 'completed', createdAt: '2026-03-05' },
+      { id: 't10', description: 'Freela Março', amount: 2000, type: 'income', categoryId: 'cat-freela', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-15', status: 'completed', createdAt: '2026-03-15' },
+    ];
+
+    // Despesas de Março 2026:
+    // Total: 2500 (moradia) + 1000 (mercado) + 500 (transporte) = 4000
+    // Moradia: 2500 / 4000 = 62.5%
+    // Mercado: 1000 / 4000 = 25.0%
+    // Transporte: 500 / 4000 = 12.5%
+    const marchExpenses = computeCategoryBreakdown(sampleTxs, 2026, 3, 'expense', mockCategories);
+    assert(marchExpenses.length === 3, `Março tem 3 categorias de despesa (obtido: ${marchExpenses.length})`);
+    assert(marchExpenses[0].categoryId === 'cat-moradia', 'Primeira categoria por valor é Moradia');
+    assertClose(marchExpenses[0].amount, 2500, 'Total moradia é 2500');
+    assert(marchExpenses[0].transactionCount === 2, 'Moradia tem 2 lançamentos');
+    assertClose(marchExpenses[0].percentage, 62.5, 'Moradia representa 62.5%');
+
+    assert(marchExpenses[1].categoryId === 'cat-mercado', 'Segunda categoria é Mercado');
+    assertClose(marchExpenses[1].amount, 1000, 'Total mercado é 1000');
+    assert(marchExpenses[1].transactionCount === 2, 'Mercado tem 2 lançamentos');
+    assertClose(marchExpenses[1].percentage, 25.0, 'Mercado representa 25.0%');
+
+    assert(marchExpenses[2].categoryId === 'cat-transporte', 'Terceira categoria é Transporte');
+    assertClose(marchExpenses[2].amount, 500, 'Total transporte é 500');
+    assertClose(marchExpenses[2].percentage, 12.5, 'Transporte representa 12.5%');
+
+    // Ano inteiro 2026 (month = null)
+    // Moradia acumula +2000 de Abril = 4500
+    // Total ano: 4500 + 1000 + 500 = 6000
+    const yearExpenses = computeCategoryBreakdown(sampleTxs, 2026, null, 'expense', mockCategories);
+    assertClose(yearExpenses[0].amount, 4500, 'Ano inteiro: Moradia totaliza 4500 (2500 + 2000)');
+    assertClose(yearExpenses[0].percentage, 75.0, 'Ano inteiro: Moradia representa 75%');
+
+    // Receitas de Março 2026
+    const marchIncomes = computeCategoryBreakdown(sampleTxs, 2026, 3, 'income', mockCategories);
+    assert(marchIncomes.length === 2, 'Março tem 2 categorias de receita');
+    assertClose(marchIncomes[0].amount, 6000, 'Salário é 6000');
+    assertClose(marchIncomes[0].percentage, 75.0, 'Salário representa 75%');
+    assertClose(marchIncomes[1].amount, 2000, 'Freelance é 2000');
+    assertClose(marchIncomes[1].percentage, 25.0, 'Freelance representa 25%');
+
+    // Período sem dados
+    const emptyBreakdown = computeCategoryBreakdown(sampleTxs, 2024, 1, 'expense', mockCategories);
+    assert(emptyBreakdown.length === 0, 'Período sem dados devolve array vazio');
+  }
+
+  // =========================================================================
+  // 7. getTopTransactions
+  // =========================================================================
+  console.log('\n--- 7. Testando getTopTransactions ---');
+  {
+    const mockCategories = [
+      { id: 'cat-moradia', name: 'Moradia', icon: 'Home', color: '#f43f5e' },
+      { id: 'cat-mercado', name: 'Alimentação', icon: 'ShoppingBag', color: '#10b981' },
+      { id: 'cat-tech', name: 'Tecnologia', icon: 'Laptop', color: '#0ea5e9' },
+    ];
+
+    const sampleTxs: Transaction[] = [
+      { id: '1', description: 'MacBook', amount: 8000, type: 'expense', categoryId: 'cat-tech', accountId: 'a1', paymentMethod: 'credit_card', date: '2026-03-01', status: 'completed', createdAt: '2026-03-01' },
+      { id: '2', description: 'Aluguel', amount: 2000, type: 'expense', categoryId: 'cat-moradia', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-05', status: 'completed', createdAt: '2026-03-05' },
+      { id: '3', description: 'Supermercado', amount: 650, type: 'expense', categoryId: 'cat-mercado', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-10', status: 'completed', createdAt: '2026-03-10' },
+      { id: '4', description: 'Monitor', amount: 1500, type: 'expense', categoryId: 'cat-tech', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-15', status: 'completed', createdAt: '2026-03-15' },
+      { id: '5', description: 'Padaria', amount: 45, type: 'expense', categoryId: 'cat-mercado', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-20', status: 'completed', createdAt: '2026-03-20' },
+      { id: '6', description: 'Café', amount: 20, type: 'expense', categoryId: 'cat-mercado', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-22', status: 'completed', createdAt: '2026-03-22' },
+      // Excluída
+      { id: '7', description: 'Cancelada', amount: 10000, type: 'expense', categoryId: 'cat-tech', accountId: 'a1', paymentMethod: 'pix', date: '2026-03-02', status: 'completed', deleted: true, createdAt: '2026-03-02' },
+    ];
+
+    const top3 = getTopTransactions(sampleTxs, 2026, 3, 'expense', mockCategories, 3);
+    assert(top3.length === 3, 'Limita ao valor solicitado de 3 itens');
+    assert(top3[0].id === '1' && top3[0].amount === 8000, '1º maior lançamento é MacBook (8000)');
+    assert(top3[0].categoryName === 'Tecnologia', 'Categoria enriquecida com nome correto');
+    assert(top3[1].id === '2' && top3[1].amount === 2000, '2º maior lançamento é Aluguel (2000)');
+    assert(top3[2].id === '4' && top3[2].amount === 1500, '3º maior lançamento é Monitor (1500)');
   }
 
   console.log(`\n========================================`);

@@ -116,18 +116,42 @@ O endpoint de cotações de mercado (`/api/quotes`) hoje é fornecido como um mi
 
 ---
 
-## 📱 Atalhos de Ícone do PWA e Ações de Inicialização
+## 📱 Recursos Mobile & PWA Avançados
 
-O aplicativo suporta a especificação de App Shortcuts do Web App Manifest (acessíveis pelo menu de contexto ao segurar o ícone na tela inicial do celular ou clicar com o botão direito no ícone do computador):
+### 1. Atalhos de Ícone (App Shortcuts)
+Acessíveis pelo menu de contexto ao pressionar o ícone na tela inicial do celular ou clicar com o botão direito no ícone do computador:
+- **Nova despesa** (`/?acao=nova-despesa`): Abre diretamente o modal de transação configurado para despesa.
+- **Nova receita** (`/?acao=nova-receita`): Abre diretamente o modal de transação configurado para receita.
+- **Análises** (`/#/analises`): Navega diretamente para o painel de análises financeiras e gráficos anuais.
 
-1. **Nova despesa** (`/?acao=nova-despesa`): Abre diretamente o modal de transação configurado para despesa, selecionando automaticamente as categorias mais frequentes e padrões rápidos.
-2. **Nova receita** (`/?acao=nova-receita`): Abre diretamente o modal de transação configurado para receita.
-3. **Análises** (`/#/analises`): Navega diretamente para o painel de análises financeiras e gráficos anuais.
+### 2. Web Share Target (Compartilhamento de Comprovantes & PIX)
+O OndeFoi? integra-se ao menu "Compartilhar" nativo do sistema operacional (Android, iOS ou navegadores compatíveis):
+- Ao compartilhar o texto ou comprovante de uma transação ou PIX (do WhatsApp, app do banco ou e-mail) selecionando o app **OndeFoi?**, o sistema direciona para `/?acao=compartilhar` com os campos `texto` (`text`) e `titulo` (`title`).
+- O analisador inteligente puro (`src/domain/receiptParser.ts`) extrai automaticamente:
+  - **Valor monetário** (ex.: `R$ 150,00` -> `15000` centavos);
+  - **Tipo** (`income` para transferências recebidas ou `expense` para pagamentos e transferências enviadas);
+  - **Favorecido / Destinatário / Descrição** limpos;
+  - **Data do lançamento** (`YYYY-MM-DD`).
+- O modal de lançamento abre instantaneamente pré-preenchido com os dados extraídos, pronto para confirmação pelo usuário.
 
-### Comportamento e Segurança:
-- **Parâmetro `acao`:** Valores suportados: `nova-despesa` e `nova-receita`. Parâmetros desconhecidos, vazios ou inválidos são ignorados de forma segura.
-- **Limpeza de URL:** A barra de endereços é imediatamente higienizada via `history.replaceState` preservando `history.state` e o hash de abas, garantindo que um reload (F5) não reabra o modal.
-- **Proteção por PIN:** Se o bloqueio por PIN estiver configurado e o app estiver bloqueado, a ação permanece em espera e só abre o modal após o usuário autenticar o PIN com sucesso.
+### 3. Feedback Tátil (Haptics)
+- Microvibrações táteis sutis via API nativa `navigator.vibrate` com fallbacks seguros para dispositivos sem suporte.
+- Padrões customizados para:
+  - **Digitação de PIN:** toque ultraleve a cada dígito, feedback tátil positivo no desbloqueio e pulso de erro em PIN incorreto;
+  - **Navegação entre abas:** resposta tátil instantânea ao alternar seções;
+  - **Confirmação de lançamentos:** pulso de sucesso ao registrar transações ou parcelamentos.
+- Pode ser ativado ou desativado a qualquer momento na aba **Configurações**.
+
+### 4. Lembretes de Fatura e Vencimentos (Due Alerts)
+- Alerta visual no topo da tela inicial (**Início**) avisando sobre:
+  - **Faturas de Cartão de Crédito:** faturas abertas que fecham ou vencem nos próximos 3 dias, ou faturas já vencidas com saldo pendente;
+  - **Despesas / Contas Pendentes:** parcelas e contas que vencem hoje, nos próximos 3 dias ou com pagamento atrasado.
+- Exibe o total acumulado pendente, contagem de itens em atenção e atalhos diretos ("Ver cartão" e "Marcar paga").
+
+### Comportamento e Segurança de Inicialização:
+- **Parâmetro `acao`:** Valores suportados: `nova-despesa`, `nova-receita` e `compartilhar`. Parâmetros desconhecidos, vazios ou inválidos são ignorados de forma segura.
+- **Limpeza de URL:** A barra de endereços é imediatamente higienizada via `history.replaceState` preservando `history.state` e o hash de abas, garantindo que um reload (F5) não reabra o modal com dados repetidos.
+- **Proteção por PIN:** Se o bloqueio por PIN estiver configurado e o app estiver bloqueado, qualquer ação (seja atalho ou compartilhamento) permanece retida e só abre o modal após o usuário autenticar o PIN com sucesso.
 
 ---
 

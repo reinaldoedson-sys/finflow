@@ -5,6 +5,7 @@ import {
   getNavigationAction,
   TabId
 } from '../domain/tabRouting';
+import { triggerHaptic } from '../utils/haptics';
 
 export interface FinFlowHistoryState {
   finflow: boolean;
@@ -96,6 +97,10 @@ export function useTabHistory(
     const hasDashboardEntryBelow = Boolean(currentState && currentState.dashboardBelow);
 
     const action = getNavigationAction(activeTab, targetTab, hasDashboardEntryBelow);
+
+    if (action !== 'none') {
+      triggerHaptic('light');
+    }
 
     switch (action) {
       case 'push': {

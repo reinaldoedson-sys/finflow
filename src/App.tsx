@@ -94,8 +94,12 @@ const FinFlowApp: React.FC = () => {
     return null;
   });
 
-  // Tipo inicial ao abrir nova transação ('expense' ou 'income')
+  // Tipo e campos iniciais ao abrir nova transação ('expense' ou 'income')
   const [txInitialType, setTxInitialType] = useState<'expense' | 'income'>('expense');
+  const [txInitialDescription, setTxInitialDescription] = useState<string | undefined>(undefined);
+  const [txInitialAmount, setTxInitialAmount] = useState<number | undefined>(undefined);
+  const [txInitialDate, setTxInitialDate] = useState<string | undefined>(undefined);
+  const [txInitialNotes, setTxInitialNotes] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     try {
@@ -115,6 +119,18 @@ const FinFlowApp: React.FC = () => {
       if (pendingLaunchAction.kind === 'new-transaction') {
         setEditingTx(null);
         setTxInitialType(pendingLaunchAction.type);
+        setTxInitialDescription(undefined);
+        setTxInitialAmount(undefined);
+        setTxInitialDate(undefined);
+        setTxInitialNotes(undefined);
+        setIsTxModalOpen(true);
+      } else if (pendingLaunchAction.kind === 'shared-content') {
+        setEditingTx(null);
+        setTxInitialType(pendingLaunchAction.type);
+        setTxInitialDescription(pendingLaunchAction.description);
+        setTxInitialAmount(pendingLaunchAction.amount);
+        setTxInitialDate(pendingLaunchAction.date);
+        setTxInitialNotes(pendingLaunchAction.notes);
         setIsTxModalOpen(true);
       }
       setPendingLaunchAction(null);
@@ -185,6 +201,10 @@ const FinFlowApp: React.FC = () => {
   const handleOpenNewTransaction = (initialType: 'expense' | 'income' = 'expense') => {
     setEditingTx(null);
     setTxInitialType(initialType);
+    setTxInitialDescription(undefined);
+    setTxInitialAmount(undefined);
+    setTxInitialDate(undefined);
+    setTxInitialNotes(undefined);
     setIsTxModalOpen(true);
   };
 
@@ -403,6 +423,10 @@ const FinFlowApp: React.FC = () => {
         onClose={() => setIsTxModalOpen(false)}
         editTransaction={editingTx}
         initialType={txInitialType}
+        initialDescription={txInitialDescription}
+        initialAmount={txInitialAmount}
+        initialDate={txInitialDate}
+        initialNotes={txInitialNotes}
       />
 
       <AccountModal

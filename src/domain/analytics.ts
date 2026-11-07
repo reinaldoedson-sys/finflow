@@ -240,3 +240,211 @@ export function isProjectedMonth(
   return month > currentMonth;
 }
 
+export interface CategoryBreakdownItem {
+  categoryId: string;
+  name: string;
+  icon: string;
+  color: string;
+  amount: number;
+  cents: number;
+  percentage: number; // 0 a 100 com 1 casa decimal (ex: 32.5)
+  transactionCount: number;
+}
+
+export interface TopTransactionItem {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  type: 'expense' | 'income';
+  categoryId: string;
+  categoryName: string;
+  categoryIcon: string;
+  categoryColor: string;
+  paymentMethod?: string;
+  creditCardId?: string;
+  accountId?: string;
+}
+
+const DEFAULT_CATEGORY_PALETTE = [
+  '#f43f5e', '#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#84cc16', '#eab308', '#a855f7',
+  '#14b8a6', '#f97316', '#6366f1', '#64748b'
+];
+
+/**
+ * Calcula a distribuição por categoria de despesas ou receitas para o período especificado (mês ou ano inteiro).
+ * Regras idênticas ao restante da aba:
+ * - Exclui excluídos (deleted / isDeleted / deletedAt)
+ * - Exclui transferências (type === 'transfer')
+ * - Considera apenas transações realizadas (status === 'completed')
+ * - Agregação em centavos inteiros via toCents/fromCents
+ * - Ordenação decrescente por valor total
+ */
+export function computeCategoryBreakdown(
+  transactions: Transaction[],
+  year: number,
+  month: number | null,
+  type: 'expense' | 'income' = 'expense',
+  categories: { id: string; name: string; icon?: string; color?: string }[] = []
+): CategoryBreakdownItem[] {
+  const targetYearStr = String(year);
+  const categoryMap = new Map<string, { name: string; icon: string; color: string }>();
+
+  categories.forEach((cat, idx) => {
+    categoryMap.set(cat.id, {
+      name: cat.name,
+      icon: cat.icon || 'Tag',
+      color: cat.color || DEFAULT_CATEGORY_PALETTE[idx % DEFAULT_CATEGORY_PALETTE.length],
+    });
+  });
+
+  const groups = new Map<string, { cents: number; count: number }>();
+  let totalPeriodCents = 0;
+
+  for (const tx of transactions) {
+    if (tx.deleted || tx.deletedAt || (tx as { isDeleted?: boolean }).isDeleted) {
+      continue;
+    }
+    if (tx.type !== type) {
+      continue;
+    }
+    if (tx.status !== 'completed') {
+      continue;
+    }
+    if (!tx.date || typeof tx.date !== 'string' || tx.date.length < 7) {
+      continue;
+    }
+
+    const txYear = tx.date.slice(0, 4);
+    if (txYear !== targetYearStr) {
+      continue;
+    }
+
+    if (month !== null) {
+      const txMonth = parseInt(tx.date.slice(5, 7), 10);
+      if (txMonth !== month) {
+        continue;
+      }
+    }
+
+    const amountCents = toCents(tx.amount);
+    if (amountCents <= 0) {
+      continue;
+    }
+
+    totalPeriodCents += amountCents;
+    const catId = tx.categoryId || 'uncategorized';
+    const current = groups.get(catId) || { cents: 0, count: 0 };
+    current.cents += amountCents;
+    current.count += 1;
+    groups.set(catId, current);
+  }
+
+  const items: CategoryBreakdownItem[] = [];
+  let index = 0;
+
+  for (const [catId, { cents, count }] of groups.entries()) {
+    const meta = categoryMap.get(catId);
+    const name = meta?.name || (catId === 'uncategorized' ? 'Sem categoria' : 'Outros');
+    const icon = meta?.icon || 'Tag';
+    const color = meta?.color || DEFAULT_CATEGORY_PALETTE[index % DEFAULT_CATEGORY_PALETTE.length];
+    index++;
+
+    const percentage = totalPeriodCents > 0
+      ? Math.round((cents / totalPeriodCents) * 1000) / 10
+      : 0;
+
+    items.push({
+      categoryId: catId,
+      name,
+      icon,
+      color,
+      amount: fromCents(cents),
+      cents,
+      percentage,
+      transactionCount: count,
+    });
+  }
+
+  // Ordena do maior valor para o menor
+  return items.sort((a, b) => b.cents - a.cents);
+}
+
+/**
+ * Retorna os N maiores lançamentos pontuais do período filtrado, ordenados decrescente pelo valor.
+ */
+export function getTopTransactions(
+  transactions: Transaction[],
+  year: number,
+  month: number | null,
+  type: 'expense' | 'income' = 'expense',
+  categories: { id: string; name: string; icon?: string; color?: string }[] = [],
+  limit: number = 5
+): TopTransactionItem[] {
+  const targetYearStr = String(year);
+  const categoryMap = new Map<string, { name: string; icon: string; color: string }>();
+
+  categories.forEach((cat, idx) => {
+    categoryMap.set(cat.id, {
+      name: cat.name,
+      icon: cat.icon || 'Tag',
+      color: cat.color || DEFAULT_CATEGORY_PALETTE[idx % DEFAULT_CATEGORY_PALETTE.length],
+    });
+  });
+
+  const filtered: { tx: Transaction; cents: number }[] = [];
+
+  for (const tx of transactions) {
+    if (tx.deleted || tx.deletedAt || (tx as { isDeleted?: boolean }).isDeleted) {
+      continue;
+    }
+    if (tx.type !== type) {
+      continue;
+    }
+    if (tx.status !== 'completed') {
+      continue;
+    }
+    if (!tx.date || typeof tx.date !== 'string' || tx.date.length < 7) {
+      continue;
+    }
+
+    const txYear = tx.date.slice(0, 4);
+    if (txYear !== targetYearStr) {
+      continue;
+    }
+
+    if (month !== null) {
+      const txMonth = parseInt(tx.date.slice(5, 7), 10);
+      if (txMonth !== month) {
+        continue;
+      }
+    }
+
+    const cents = toCents(tx.amount);
+    if (cents > 0) {
+      filtered.push({ tx, cents });
+    }
+  }
+
+  filtered.sort((a, b) => b.cents - a.cents);
+
+  return filtered.slice(0, limit).map(({ tx }) => {
+    const meta = categoryMap.get(tx.categoryId);
+    return {
+      id: tx.id,
+      description: tx.description,
+      amount: tx.amount,
+      date: tx.date,
+      type: tx.type as 'expense' | 'income',
+      categoryId: tx.categoryId,
+      categoryName: meta?.name || 'Outros',
+      categoryIcon: meta?.icon || 'Tag',
+      categoryColor: meta?.color || '#94a3b8',
+      paymentMethod: tx.paymentMethod,
+      creditCardId: tx.creditCardId,
+      accountId: tx.accountId,
+    };
+  });
+}
+
