@@ -20,6 +20,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { SampleDataBanner } from './components/SampleDataBanner';
 import { useTabHistory } from './hooks/useTabHistory';
 import { tabFromHash } from './domain/tabRouting';
+import { parseLaunchAction, removeLaunchParams, LaunchAction } from './domain/launchActions';
 
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
@@ -76,6 +77,26 @@ const FinFlowApp: React.FC = () => {
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
+  // Ação de lançamento capturada na inicialização (ex.: atalhos do ícone PWA ?acao=nova-despesa)
+  const [pendingLaunchAction, setPendingLaunchAction] = useState<LaunchAction | null>(() => {
+    if (typeof window !== 'undefined') {
+      const action = parseLaunchAction(window.location.search);
+      if (action) {
+        const cleanUrl = removeLaunchParams(
+          window.location.pathname,
+          window.location.search,
+          window.location.hash
+        );
+        window.history.replaceState(window.history.state, '', cleanUrl);
+        return action;
+      }
+    }
+    return null;
+  });
+
+  // Tipo inicial ao abrir nova transação ('expense' ou 'income')
+  const [txInitialType, setTxInitialType] = useState<'expense' | 'income'>('expense');
+
   useEffect(() => {
     try {
       localStorage.setItem('finflow_sidebar_expanded', String(isSidebarExpanded));
@@ -87,6 +108,18 @@ const FinFlowApp: React.FC = () => {
   // Modals state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+
+  // Executa ação pendente de inicialização assim que o app estiver liberado (sem PIN ou após desbloqueio)
+  useEffect(() => {
+    if (!isLocked && pendingLaunchAction) {
+      if (pendingLaunchAction.kind === 'new-transaction') {
+        setEditingTx(null);
+        setTxInitialType(pendingLaunchAction.type);
+        setIsTxModalOpen(true);
+      }
+      setPendingLaunchAction(null);
+    }
+  }, [isLocked, pendingLaunchAction]);
 
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -135,6 +168,7 @@ const FinFlowApp: React.FC = () => {
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         setEditingTx(null);
+        setTxInitialType('expense');
         setIsTxModalOpen(true);
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
@@ -148,8 +182,9 @@ const FinFlowApp: React.FC = () => {
   }, []);
 
   // Handlers
-  const handleOpenNewTransaction = () => {
+  const handleOpenNewTransaction = (initialType: 'expense' | 'income' = 'expense') => {
     setEditingTx(null);
+    setTxInitialType(initialType);
     setIsTxModalOpen(true);
   };
 
@@ -367,6 +402,7 @@ const FinFlowApp: React.FC = () => {
         isOpen={isTxModalOpen}
         onClose={() => setIsTxModalOpen(false)}
         editTransaction={editingTx}
+        initialType={txInitialType}
       />
 
       <AccountModal

@@ -1,6 +1,6 @@
-# FinFlow
+# OndeFoi?
 
-FinFlow é um aplicativo de gestão de finanças pessoais progressivo (PWA) projetado com foco em privacidade, velocidade e autonomia. Seus dados financeiros residem primariamente no dispositivo do usuário através do IndexedDB local, com suporte a sincronização em nuvem opcional com o Firebase/Firestore.
+OndeFoi? é um aplicativo de gestão de finanças pessoais progressivo (PWA) projetado com foco em privacidade, velocidade e autonomia. Seus dados financeiros residem primariamente no dispositivo do usuário através do IndexedDB local, com suporte a sincronização em nuvem opcional com o Firebase/Firestore.
 
 ---
 
@@ -113,6 +113,21 @@ O FinFlow opera com arquitetura local-first e isolamento de dados entre contas n
 ## 📈 Cotações
 
 O endpoint de cotações de mercado (`/api/quotes`) hoje é fornecido como um middleware no servidor de desenvolvimento Vite (`server/quotes.ts`). Em ambientes de produção estáticos, a variável `VITE_QUOTES_API_URL` pode ser configurada para apontar para um serviço ou função externa que forneça as cotações no mesmo formato.
+
+---
+
+## 📱 Atalhos de Ícone do PWA e Ações de Inicialização
+
+O aplicativo suporta a especificação de App Shortcuts do Web App Manifest (acessíveis pelo menu de contexto ao segurar o ícone na tela inicial do celular ou clicar com o botão direito no ícone do computador):
+
+1. **Nova despesa** (`/?acao=nova-despesa`): Abre diretamente o modal de transação configurado para despesa, selecionando automaticamente as categorias mais frequentes e padrões rápidos.
+2. **Nova receita** (`/?acao=nova-receita`): Abre diretamente o modal de transação configurado para receita.
+3. **Análises** (`/#/analises`): Navega diretamente para o painel de análises financeiras e gráficos anuais.
+
+### Comportamento e Segurança:
+- **Parâmetro `acao`:** Valores suportados: `nova-despesa` e `nova-receita`. Parâmetros desconhecidos, vazios ou inválidos são ignorados de forma segura.
+- **Limpeza de URL:** A barra de endereços é imediatamente higienizada via `history.replaceState` preservando `history.state` e o hash de abas, garantindo que um reload (F5) não reabra o modal.
+- **Proteção por PIN:** Se o bloqueio por PIN estiver configurado e o app estiver bloqueado, a ação permanece em espera e só abre o modal após o usuário autenticar o PIN com sucesso.
 
 ---
 

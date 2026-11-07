@@ -29,12 +29,14 @@ interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   editTransaction?: Transaction | null;
+  initialType?: 'expense' | 'income';
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   isOpen,
   onClose,
-  editTransaction
+  editTransaction,
+  initialType = 'expense'
 }) => {
   const { 
     transactions,
@@ -50,7 +52,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const isQuickMode = !editTransaction;
 
-  const [type, setType] = useState<TransactionType>('expense');
+  const [type, setType] = useState<TransactionType>(initialType);
   const [description, setDescription] = useState<string>('');
   const [amountStr, setAmountStr] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -113,7 +115,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setIsInstallment(false);
     } else {
       // Default new transaction values com getQuickDefaults
-      setType('expense');
+      const targetType: TransactionType = initialType || 'expense';
+      setType(targetType);
       setDescription('');
       setAmountStr('');
       setNotes('');
@@ -129,7 +132,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setShowDetails(false);
 
       // Padrões rápidos inteligentes
-      const defaults = getQuickDefaults(transactions, accounts, creditCards, 'expense', categories);
+      const defaults = getQuickDefaults(transactions, accounts, creditCards, targetType, categories);
       setAccountId(defaults.accountId);
       setPaymentMethod(defaults.paymentMethod);
       setCreditCardId(defaults.creditCardId);
@@ -148,7 +151,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
     }
     setError('');
-  }, [editTransaction, isOpen, accounts, categories, creditCards, selectedMonth, transactions]);
+  }, [editTransaction, isOpen, accounts, categories, creditCards, selectedMonth, transactions, initialType]);
 
   // Derived effective values for installment
   const parsedSingleAmount = parseNum(amountStr);

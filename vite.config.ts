@@ -88,6 +88,47 @@ export default defineConfig(() => {
               type: 'image/png',
               purpose: 'maskable'
             }
+          ],
+          shortcuts: [
+            {
+              name: 'Nova despesa',
+              short_name: 'Despesa',
+              description: 'Registrar uma nova despesa rapidamente',
+              url: '/?acao=nova-despesa',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png'
+                }
+              ]
+            },
+            {
+              name: 'Nova receita',
+              short_name: 'Receita',
+              description: 'Registrar uma nova receita rapidamente',
+              url: '/?acao=nova-receita',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png'
+                }
+              ]
+            },
+            {
+              name: 'Análises',
+              short_name: 'Análises',
+              description: 'Painel de análises financeiras e gráficos anuais',
+              url: '/#/analises',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png'
+                }
+              ]
+            }
           ]
         },
         workbox: {
