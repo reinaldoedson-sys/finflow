@@ -78,11 +78,11 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex md:hidden items-center gap-1.5 shrink-0">
             <img
               src="/pwa-192x192.png"
-              alt="FinFlow"
+              alt="OndeFoi?"
               className="w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
             />
             <span className="hidden sm:inline text-sm font-extrabold tracking-tight text-white">
-              FinFlow
+              OndeFoi?
             </span>
           </div>
 

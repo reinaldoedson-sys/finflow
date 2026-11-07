@@ -440,7 +440,7 @@ export const InvestmentModal: React.FC<InvestmentModalProps> = ({
             <div>
               <div className="text-xs font-bold text-white">Atualização Automática de Cotação</div>
               <div className="text-[11px] text-slate-400">
-                O FinFlow atualizará o preço com base em cotações atualizadas de mercado.
+                O OndeFoi? atualizará o preço com base em cotações atualizadas de mercado.
               </div>
             </div>
             <input

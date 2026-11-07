@@ -60,8 +60,8 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: '/',
-          name: 'FinFlow - Gestão Financeira',
-          short_name: 'FinFlow',
+          name: 'OndeFoi? - Gestão Financeira',
+          short_name: 'OndeFoi?',
           description: 'Controle de finanças pessoais com dados locais e sincronização opcional',
           theme_color: '#0b0f17',
           background_color: '#0b0f17',

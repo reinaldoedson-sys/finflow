@@ -2,6 +2,7 @@ import {
   getAnalyticsYears,
   computeMonthlySeries,
   computePeriodTotals,
+  isProjectedMonth,
 } from '../src/domain/analytics';
 import { computeMonthlySummary, computeAccounts, computeCreditCards } from '../src/domain/aggregates';
 import { Transaction, Account, CreditCard } from '../src/types/finance';
@@ -230,6 +231,83 @@ async function runAnalyticsTests() {
     }
   }
 
+  // =========================================================================
+  // 5. isProjectedMonth: regras de meses previstos
+  // =========================================================================
+  console.log('\n--- 5. Testando isProjectedMonth ---');
+  {
+    const today = '2026-05-20';
+
+    // Mês atual não é previsto
+    assert(
+      isProjectedMonth(2026, 5, today) === false,
+      'Mês atual (maio de 2026 com hoje em maio/2026) NÃO é previsto'
+    );
+
+    // Mês seguinte é previsto
+    assert(
+      isProjectedMonth(2026, 6, today) === true,
+      'Mês seguinte (junho de 2026 com hoje em maio/2026) É previsto'
+    );
+
+    // Mês anterior não é previsto
+    assert(
+      isProjectedMonth(2026, 4, today) === false,
+      'Mês anterior (abril de 2026 com hoje em maio/2026) NÃO é previsto'
+    );
+
+    // Virada de ano: dezembro de um ano e janeiro do seguinte
+    const todayDez = '2026-12-15';
+    assert(
+      isProjectedMonth(2026, 12, todayDez) === false,
+      'Virada de ano: dezembro do ano atual NÃO é previsto'
+    );
+    assert(
+      isProjectedMonth(2027, 1, todayDez) === true,
+      'Virada de ano: janeiro do ano seguinte É previsto'
+    );
+
+    const todayJan = '2027-01-10';
+    assert(
+      isProjectedMonth(2026, 12, todayJan) === false,
+      'Virada de ano: dezembro do ano passado nunca é previsto'
+    );
+    assert(
+      isProjectedMonth(2027, 1, todayJan) === false,
+      'Virada de ano: janeiro do ano atual NÃO é previsto'
+    );
+    assert(
+      isProjectedMonth(2027, 2, todayJan) === true,
+      'Virada de ano: fevereiro do ano atual É previsto'
+    );
+
+    // Ano futuro inteiro previsto
+    let allFutureProjected = true;
+    for (let m = 1; m <= 12; m++) {
+      if (!isProjectedMonth(2028, m, today)) {
+        allFutureProjected = false;
+        break;
+      }
+    }
+    assert(
+      allFutureProjected,
+      'Ano futuro (2028) é inteiramente previsto para todos os 12 meses'
+    );
+
+    // Ano passado nunca previsto
+    let nonePastProjected = true;
+    for (let m = 1; m <= 12; m++) {
+      if (isProjectedMonth(2025, m, today)) {
+        nonePastProjected = false;
+        break;
+      }
+    }
+    assert(
+      nonePastProjected,
+      'Ano passado (2025) NUNCA é previsto para nenhum dos 12 meses'
+    );
+  }
+
   console.log(`\n========================================`);
   console.log(`Resultado dos Testes: ${passed} passaram, ${failed} falharam.`);
   console.log(`========================================\n`);
@@ -243,3 +321,4 @@ runAnalyticsTests().catch(err => {
   console.error('Erro ao executar testes de analytics:', err);
   process.exit(1);
 });
+

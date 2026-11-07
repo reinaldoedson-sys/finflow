@@ -335,8 +335,8 @@ const FinFlowApp: React.FC = () => {
         <footer className="hidden md:block mt-auto border-t border-slate-900 bg-[#080c14] py-6 px-4 text-center text-xs text-slate-500">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <img src="/pwa-192x192.png" alt="FinFlow" className="w-4 h-4 rounded object-cover shadow-sm" />
-              <span className="font-semibold text-slate-400">FinFlow</span>
+              <img src="/pwa-192x192.png" alt="OndeFoi?" className="w-4 h-4 rounded object-cover shadow-sm" />
+              <span className="font-semibold text-slate-400">OndeFoi?</span>
               <span>· Gestão Financeira Pessoal com Dados Locais e Sincronização Opcional</span>
             </div>
             <div className="flex items-center gap-4 text-slate-500 text-[11px]">

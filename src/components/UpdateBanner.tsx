@@ -44,7 +44,7 @@ export const UpdateBanner: React.FC = () => {
             </span>
           </div>
           <p className="text-slate-400 text-[11px] mt-0.5">
-            Uma nova versão do FinFlow está pronta. Clique em atualizar quando terminar de preencher seus dados.
+            Uma nova versão do OndeFoi? está pronta. Clique em atualizar quando terminar de preencher seus dados.
           </p>
         </div>
       </div>

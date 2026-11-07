@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { 
@@ -16,10 +16,11 @@ import { todayLocalISO } from '../utils/localDate';
 import { 
   getAnalyticsYears, 
   computeMonthlySeries, 
-  computePeriodTotals 
+  computePeriodTotals,
+  isProjectedMonth
 } from '../domain/analytics';
 import { SparklineChart } from '../components/charts/SparklineChart';
-import { GroupedBarChart } from '../components/charts/GroupedBarChart';
+import { GroupedBarChart, GroupedBarMode } from '../components/charts/GroupedBarChart';
 import { SmoothLineChart } from '../components/charts/SmoothLineChart';
 
 // Constantes de cores do painel (conforme diretrizes)
@@ -39,7 +40,7 @@ const MONTH_NAMES_FULL = [
 ];
 
 export const AnalyticsView: React.FC = () => {
-  const { transactions, currency, selectedMonth: headerMonth } = useFinance();
+  const { transactions, currency, selectedMonth: headerMonth, setSelectedMonth: setGlobalMonth } = useFinance();
   const { hideValues } = useSecurity();
 
   const todayStr = useMemo(() => todayLocalISO(), []);
@@ -57,21 +58,52 @@ export const AnalyticsView: React.FC = () => {
     return !isNaN(headerYear) && headerYear > 1900 ? headerYear : currentYear;
   });
 
-  // Filtro de mês: se o ano selecionado for o atual, padrão é o mês atual; senão, 'Ano inteiro' (null)
+  // Filtro de mês: se o ano selecionado for o atual, padrão é o mês do cabeçalho / atual; senão, 'Ano inteiro' (null)
   const [selectedMonth, setSelectedMonth] = useState<number | null>(() => {
     const headerYear = parseInt(headerMonth.slice(0, 4), 10);
     const headerM = parseInt(headerMonth.slice(5, 7), 10);
     if (headerYear === currentYear) {
       return !isNaN(headerM) && headerM >= 1 && headerM <= 12 ? headerM : currentMonthNum;
     }
-    return null;
+    return !isNaN(headerM) && headerM >= 1 && headerM <= 12 ? headerM : null;
   });
+
+  // Seletor de modo do gráfico "Análise mensal" ('income_expense' por padrão ou 'salary_other')
+  const [groupedBarMode, setGroupedBarMode] = useState<GroupedBarMode>('income_expense');
+
+  // Sincronização automática quando o mês do cabeçalho mudar (via carrossel < Mês/Ano >)
+  useEffect(() => {
+    if (!headerMonth) return;
+    const [yStr, mStr] = headerMonth.split('-');
+    const y = parseInt(yStr, 10);
+    const m = parseInt(mStr, 10);
+    if (!isNaN(y) && y > 1900) {
+      setSelectedYear(y);
+    }
+    if (!isNaN(m) && m >= 1 && m <= 12) {
+      setSelectedMonth(m);
+    }
+  }, [headerMonth]);
+
+  // Manipulador de seleção de mês: atualiza estado local e sincroniza com o cabeçalho global
+  const handleSelectMonth = (month: number | null) => {
+    setSelectedMonth(month);
+    if (month !== null && setGlobalMonth) {
+      const monthStr = `${selectedYear}-${String(month).padStart(2, '0')}`;
+      if (monthStr !== headerMonth) {
+        setGlobalMonth(monthStr);
+      }
+    }
+  };
 
   // Manipulador de troca de ano: sincroniza o mês padrão segundo a regra
   const handleSelectYear = (year: number) => {
     setSelectedYear(year);
     if (year === currentYear) {
       setSelectedMonth(currentMonthNum);
+      if (setGlobalMonth) {
+        setGlobalMonth(`${year}-${String(currentMonthNum).padStart(2, '0')}`);
+      }
     } else {
       setSelectedMonth(null);
     }
@@ -159,7 +191,7 @@ export const AnalyticsView: React.FC = () => {
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
             <button
               type="button"
-              onClick={() => setSelectedMonth(null)}
+              onClick={() => handleSelectMonth(null)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors min-h-[36px] ${
                 selectedMonth === null
                   ? 'bg-emerald-500 text-slate-950 shadow-sm'
@@ -175,7 +207,7 @@ export const AnalyticsView: React.FC = () => {
                 <button
                   key={mNum}
                   type="button"
-                  onClick={() => setSelectedMonth(mNum)}
+                  onClick={() => handleSelectMonth(mNum)}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors min-h-[36px] ${
                     isActive
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
@@ -240,7 +272,7 @@ export const AnalyticsView: React.FC = () => {
             <div className="space-y-1">
               <button
                 type="button"
-                onClick={() => setSelectedMonth(null)}
+                onClick={() => handleSelectMonth(null)}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                   selectedMonth === null
                     ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
@@ -259,7 +291,7 @@ export const AnalyticsView: React.FC = () => {
                     <button
                       key={mNum}
                       type="button"
-                      onClick={() => setSelectedMonth(mNum)}
+                      onClick={() => handleSelectMonth(mNum)}
                       className={`px-2 py-1.5 rounded-lg text-xs font-medium text-center transition-colors ${
                         isActive
                           ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
@@ -392,29 +424,69 @@ export const AnalyticsView: React.FC = () => {
             </div>
           )}
 
-          {/* Gráfico 1: "Análise mensal" (Salário x Outras receitas - GroupedBarChart) */}
+          {/* Gráfico 1: "Análise mensal" (GroupedBarChart com seletor de modo) */}
           <div className="p-4 sm:p-5 rounded-xl bg-slate-900/60 border border-slate-800/80 shadow-sm space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-white tracking-tight flex items-center gap-2">
                   <span>Análise mensal</span>
                   <span className="text-xs text-slate-400 font-normal">
-                    (Salário × Outras receitas)
+                    {groupedBarMode === 'income_expense' 
+                      ? '(Receitas × Despesas)' 
+                      : '(Salário × Outras receitas)'}
                   </span>
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Comparação mensal da composição das entradas em {selectedYear}.
+                  {groupedBarMode === 'income_expense'
+                    ? (selectedMonth !== null
+                        ? `Comparativo de receitas e despesas com foco em ${MONTH_NAMES_FULL[selectedMonth - 1]} de ${selectedYear}. Toque em qualquer coluna para alternar o mês.`
+                        : `Comparativo mensal de receitas e despesas em ${selectedYear}. Toque em qualquer coluna para alternar o mês.`)
+                    : (selectedMonth !== null
+                        ? `Composição de entradas com foco em ${MONTH_NAMES_FULL[selectedMonth - 1]} de ${selectedYear}. Toque em qualquer coluna para alternar o mês.`
+                        : `Comparação mensal da composição das entradas em ${selectedYear}. Toque em qualquer coluna para alternar o mês.`)}
                 </p>
+              </div>
+
+              {/* Seletor do gráfico: "Receitas × Despesas" (padrão) e "Salário × Outras receitas" */}
+              <div 
+                className="flex items-center p-0.5 rounded-lg bg-slate-950/80 border border-slate-800 self-start sm:self-auto shrink-0"
+                role="group"
+                aria-label="Modo de visualização da Análise mensal"
+              >
+                <button
+                  type="button"
+                  onClick={() => setGroupedBarMode('income_expense')}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                    groupedBarMode === 'income_expense'
+                      ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Receitas × Despesas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGroupedBarMode('salary_other')}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                    groupedBarMode === 'salary_other'
+                      ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Salário × Outras receitas
+                </button>
               </div>
             </div>
 
             <GroupedBarChart
               data={monthlySeries}
+              mode={groupedBarMode}
               currency={currency}
               hideValues={hideValues}
               selectedMonth={selectedMonth}
-              onSelectMonth={(m) => setSelectedMonth(m === selectedMonth ? null : m)}
-              ariaLabel={`Gráfico de barras agrupadas comparando salário e outras receitas por mês de ${selectedYear}`}
+              onSelectMonth={(m) => handleSelectMonth(m === selectedMonth ? null : m)}
+              isProjected={(m) => isProjectedMonth(selectedYear, m, todayStr)}
+              ariaLabel={`Gráfico de barras agrupadas comparando ${groupedBarMode === 'income_expense' ? 'receitas e despesas' : 'salário e outras receitas'} por mês de ${selectedYear}`}
             />
           </div>
 
@@ -429,7 +501,9 @@ export const AnalyticsView: React.FC = () => {
                   </span>
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Acompanhe a relação entre o total recebido e os gastos realizados mês a mês.
+                  {selectedMonth !== null
+                    ? `Curvas anuais com foco em ${MONTH_NAMES_FULL[selectedMonth - 1]} de ${selectedYear}.`
+                    : `Acompanhe a relação entre o total recebido e os gastos realizados mês a mês em ${selectedYear}.`}
                 </p>
               </div>
             </div>
@@ -439,7 +513,8 @@ export const AnalyticsView: React.FC = () => {
               currency={currency}
               hideValues={hideValues}
               selectedMonth={selectedMonth}
-              onSelectMonth={(m) => setSelectedMonth(m === selectedMonth ? null : m)}
+              onSelectMonth={(m) => handleSelectMonth(m === selectedMonth ? null : m)}
+              isProjected={(m) => isProjectedMonth(selectedYear, m, todayStr)}
               ariaLabel={`Curvas suaves de receitas e despesas mês a mês de ${selectedYear}`}
             />
           </div>

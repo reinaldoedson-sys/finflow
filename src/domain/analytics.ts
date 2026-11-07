@@ -206,3 +206,37 @@ export function computePeriodTotals(
     savingsRate,
   };
 }
+
+/**
+ * Determina se determinado mês/ano é estritamente posterior ao mês atual (mês previsto).
+ * Compara ano e mês lidos diretamente da string 'YYYY-MM-DD' (sem Date em UTC).
+ * Anos posteriores ao atual são inteiramente previstos; anos anteriores nunca.
+ *
+ * @param year Ano a verificar (ex: 2026)
+ * @param month Mês a verificar (1 a 12)
+ * @param todayISO Data de referência no formato 'YYYY-MM-DD' (padrão: hoje local)
+ */
+export function isProjectedMonth(
+  year: number,
+  month: number,
+  todayISO: string = todayLocalISO()
+): boolean {
+  if (!todayISO || typeof todayISO !== 'string' || todayISO.length < 7) {
+    return false;
+  }
+  const currentYear = parseInt(todayISO.slice(0, 4), 10);
+  const currentMonth = parseInt(todayISO.slice(5, 7), 10);
+
+  if (isNaN(currentYear) || isNaN(currentMonth)) {
+    return false;
+  }
+
+  if (year > currentYear) {
+    return true;
+  }
+  if (year < currentYear) {
+    return false;
+  }
+  return month > currentMonth;
+}
+

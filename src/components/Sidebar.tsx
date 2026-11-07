@@ -120,13 +120,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <img
               src="/pwa-192x192.png"
-              alt="FinFlow"
+              alt="OndeFoi?"
               className="w-8 h-8 rounded-xl object-cover shrink-0 shadow-md shadow-cyan-500/10 group-hover:scale-105 transition-transform"
             />
             {showExpanded && (
               <div className="flex flex-col truncate animate-in fade-in duration-200">
                 <span className="text-base font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors leading-tight">
-                  FinFlow
+                  OndeFoi?
                 </span>
                 <span className="text-[10px] text-slate-500 font-medium tracking-wider uppercase">
                   Finanças Pessoais

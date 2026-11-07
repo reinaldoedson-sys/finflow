@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CurrencyCode } from '../../types/finance';
 import { formatCurrency } from '../../utils/currency';
 import { formatCompactCurrency } from '../../utils/compactCurrency';
@@ -16,6 +16,7 @@ interface SmoothLineChartProps {
   hideValues: boolean;
   selectedMonth?: number | null;
   onSelectMonth?: (month: number) => void;
+  isProjected?: (month: number) => boolean;
   ariaLabel: string;
 }
 
@@ -51,9 +52,15 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
   hideValues,
   selectedMonth = null,
   onSelectMonth,
+  isProjected,
   ariaLabel,
 }) => {
   const [hoveredMonth, setHoveredMonth] = useState<number | null>(null);
+
+  // Limpa o hover sempre que a seleção de mês mudar
+  useEffect(() => {
+    setHoveredMonth(null);
+  }, [selectedMonth]);
 
   const activeIndex = hoveredMonth !== null
     ? hoveredMonth - 1
@@ -73,12 +80,24 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
 
   // Encontra o valor máximo entre receitas e despesas
   let maxVal = 0;
+  let totalIncome = 0;
+  let totalExpense = 0;
   for (const item of data) {
     if (item.income > maxVal) maxVal = item.income;
     if (item.expense > maxVal) maxVal = item.expense;
+    totalIncome += item.income;
+    totalExpense += item.expense;
   }
+  const totalBalance = totalIncome - totalExpense;
+
   if (maxVal <= 0) maxVal = 1000;
   maxVal = maxVal * 1.15; // 15% de folga no topo
+
+  // Verifica se há ao menos um mês previsto com valor diferente de zero
+  const hasProjectedWithValues = data.some(item => {
+    const projected = isProjected ? isProjected(item.month) : false;
+    return projected && (item.income > 0 || item.expense > 0);
+  });
 
   const yTicks = [0, maxVal * 0.33, maxVal * 0.66, maxVal];
 
@@ -97,16 +116,51 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
     return { x, y };
   });
 
-  const incomePath = buildSmoothPath(incomePoints);
-  const expensePath = buildSmoothPath(expensePoints);
+  // Divisão entre segmentos realizados e previstos (para traçado tracejado no futuro)
+  let lastRealizedIdx = -1;
+  for (let i = 0; i < data.length; i++) {
+    if (!isProjected || !isProjected(data[i].month)) {
+      lastRealizedIdx = i;
+    }
+  }
+
+  let realizedIncomePts: { x: number; y: number }[] = [];
+  let projectedIncomePts: { x: number; y: number }[] = [];
+  let realizedExpensePts: { x: number; y: number }[] = [];
+  let projectedExpensePts: { x: number; y: number }[] = [];
+
+  if (lastRealizedIdx === -1) {
+    // Todos os meses são previstos
+    projectedIncomePts = incomePoints;
+    projectedExpensePts = expensePoints;
+  } else if (lastRealizedIdx === data.length - 1) {
+    // Todos os meses são realizados
+    realizedIncomePts = incomePoints;
+    realizedExpensePts = expensePoints;
+  } else {
+    // Parte realizada e parte prevista conectadas
+    realizedIncomePts = incomePoints.slice(0, lastRealizedIdx + 1);
+    projectedIncomePts = incomePoints.slice(lastRealizedIdx);
+    realizedExpensePts = expensePoints.slice(0, lastRealizedIdx + 1);
+    projectedExpensePts = expensePoints.slice(lastRealizedIdx);
+  }
+
+  const realizedIncomePath = buildSmoothPath(realizedIncomePts);
+  const projectedIncomePath = buildSmoothPath(projectedIncomePts);
+  const realizedExpensePath = buildSmoothPath(realizedExpensePts);
+  const projectedExpensePath = buildSmoothPath(projectedExpensePts);
 
   const activeItem = activeIndex !== null && data[activeIndex] ? data[activeIndex] : null;
+  const activeIsProjected = activeItem && isProjected ? isProjected(activeItem.month) : false;
 
   return (
-    <div className="relative w-full select-none">
+    <div 
+      className="relative w-full select-none"
+      onMouseLeave={() => setHoveredMonth(null)}
+    >
       {/* Legenda e Tooltip dinâmico */}
-      <div className="flex items-center justify-between mb-2 px-1 text-xs min-h-[24px]">
-        <div className="flex items-center gap-4 text-slate-400">
+      <div className="flex items-center justify-between mb-2 px-1 text-xs min-h-[28px] flex-wrap gap-2">
+        <div className="flex items-center gap-4 text-slate-400 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
             <span className="text-[11px] font-medium text-slate-300">Receitas</span>
@@ -115,12 +169,27 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
             <span className="text-[11px] font-medium text-slate-300">Despesas</span>
           </div>
+          {hasProjectedWithValues && (
+            <div className="flex items-center gap-1.5" title="Parcelas e lançamentos com competência futura">
+              <span className="w-3.5 h-0 border-t-2 border-dashed border-amber-400 inline-block" />
+              <span className="text-[11px] font-medium text-amber-300/90">
+                Previsto (parcelas e lançamentos futuros)
+              </span>
+            </div>
+          )}
         </div>
 
         {activeItem ? (
-          <div className="flex items-center gap-3 font-mono text-xs bg-slate-900/90 border border-slate-700/80 px-2.5 py-1 rounded-lg shadow-sm">
-            <span className="font-sans font-semibold text-white">
-              {MONTH_NAMES[activeItem.month - 1]}:
+          <div className={`flex items-center gap-2.5 font-mono text-xs px-3 py-1 rounded-lg shadow-sm border ${
+            activeIsProjected 
+              ? 'bg-slate-900/95 border-amber-500/50' 
+              : 'bg-slate-900/95 border-emerald-500/40'
+          }`}>
+            <span className="font-sans font-semibold text-white flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${activeIsProjected ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`} />
+              {MONTH_NAMES[activeItem.month - 1]}
+              {activeIsProjected ? ' (previsto)' : ''}
+              {selectedMonth === activeItem.month ? ' (selecionado)' : ''}:
             </span>
             <span className="text-emerald-400 font-semibold">
               +{formatCurrency(activeItem.income, currency, hideValues)}
@@ -135,9 +204,20 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
             </span>
           </div>
         ) : (
-          <span className="text-[11px] text-slate-500 hidden sm:inline">
-            Passe o mouse ou toque para detalhes
-          </span>
+          <div className="flex items-center gap-2 font-mono text-xs text-slate-400 bg-slate-900/60 border border-slate-800 px-2.5 py-1 rounded-lg">
+            <span className="font-sans text-slate-400">Total do ano:</span>
+            <span className="text-emerald-400 font-semibold">
+              +{formatCurrency(totalIncome, currency, hideValues)}
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className="text-rose-400 font-semibold">
+              -{formatCurrency(totalExpense, currency, hideValues)}
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className={`font-semibold ${totalBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {totalBalance >= 0 ? '+' : ''}{formatCurrency(totalBalance, currency, hideValues)}
+            </span>
+          </div>
         )}
       </div>
 
@@ -147,17 +227,6 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
         role="img"
         aria-label={ariaLabel}
       >
-        <defs>
-          <linearGradient id="income-line-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-          </linearGradient>
-          <linearGradient id="expense-line-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.0" />
-          </linearGradient>
-        </defs>
-
         {/* Linhas de grade e valores do Eixo Y */}
         {yTicks.map((val, idx) => {
           const y = padTop + chartH - (val / maxVal) * chartH;
@@ -197,25 +266,53 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
           />
         )}
 
-        {/* Curva de Receitas (Esmeralda) */}
-        <path
-          d={incomePath}
-          fill="none"
-          stroke="#10b981"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {/* Curvas Realizadas (Traço Contínuo) */}
+        {realizedIncomePath && (
+          <path
+            d={realizedIncomePath}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+        {realizedExpensePath && (
+          <path
+            d={realizedExpensePath}
+            fill="none"
+            stroke="#f43f5e"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
 
-        {/* Curva de Despesas (Rosa) */}
-        <path
-          d={expensePath}
-          fill="none"
-          stroke="#f43f5e"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {/* Curvas Previstas (Traço Tracejado) */}
+        {projectedIncomePath && (
+          <path
+            d={projectedIncomePath}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="2.5"
+            strokeDasharray="6 4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.8"
+          />
+        )}
+        {projectedExpensePath && (
+          <path
+            d={projectedExpensePath}
+            fill="none"
+            stroke="#f43f5e"
+            strokeWidth="2.5"
+            strokeDasharray="6 4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.8"
+          />
+        )}
 
         {/* Pontos nas intersecções de cada mês */}
         {data.map((item, idx) => {
@@ -224,6 +321,8 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
           const isSelected = selectedMonth === item.month;
           const isHovered = hoveredMonth === item.month;
           const isActive = isSelected || isHovered;
+          const isDimmed = selectedMonth !== null && !isActive;
+          const isProj = isProjected ? isProjected(item.month) : false;
 
           const colX = padLeft + idx * colW;
 
@@ -235,13 +334,28 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
               onMouseLeave={() => setHoveredMonth(null)}
               onClick={() => onSelectMonth && onSelectMonth(item.month)}
             >
+              {/* Moldura de destaque da coluna se o mês estiver selecionado */}
+              {isSelected && (
+                <rect
+                  x={colX + 3}
+                  y={padTop - 6}
+                  width={colW - 6}
+                  height={chartH + 12}
+                  fill={isProj ? "rgba(245, 158, 11, 0.08)" : "rgba(16, 185, 129, 0.08)"}
+                  stroke={isProj ? "rgba(245, 158, 11, 0.50)" : "rgba(16, 185, 129, 0.40)"}
+                  strokeWidth="1.2"
+                  strokeDasharray="3 3"
+                  rx="6"
+                />
+              )}
+
               {/* Área invisível ampla para clique/hover */}
               <rect
                 x={colX}
                 y={padTop}
                 width={colW}
                 height={chartH + padBottom}
-                fill={isHovered ? 'rgba(255, 255, 255, 0.03)' : isSelected ? 'rgba(16, 185, 129, 0.05)' : 'transparent'}
+                fill={isHovered ? 'rgba(255, 255, 255, 0.05)' : 'transparent'}
                 rx="6"
               />
 
@@ -251,9 +365,10 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
                 cy={incPt.y}
                 r={isActive ? 5.5 : 3.5}
                 fill="#10b981"
-                stroke="#0f172a"
-                strokeWidth={isActive ? 2.5 : 1.5}
+                stroke={isProj ? "#f59e0b" : "#0f172a"}
+                strokeWidth={isProj ? 2 : isActive ? 2.5 : 1.5}
                 className="transition-all duration-150"
+                opacity={isActive ? 1 : isDimmed ? 0.35 : isProj ? 0.75 : 0.85}
               />
 
               {/* Ponto Despesa */}
@@ -262,35 +377,49 @@ export const SmoothLineChart: React.FC<SmoothLineChartProps> = ({
                 cy={expPt.y}
                 r={isActive ? 5.5 : 3.5}
                 fill="#f43f5e"
-                stroke="#0f172a"
-                strokeWidth={isActive ? 2.5 : 1.5}
+                stroke={isProj ? "#f59e0b" : "#0f172a"}
+                strokeWidth={isProj ? 2 : isActive ? 2.5 : 1.5}
                 className="transition-all duration-150"
+                opacity={isActive ? 1 : isDimmed ? 0.35 : isProj ? 0.75 : 0.85}
               />
 
               {/* Rótulo do Mês no Eixo X */}
-              <text
-                x={incPt.x}
-                y={height - 12}
-                textAnchor="middle"
-                className={`text-[11px] font-medium transition-colors ${
-                  isSelected
-                    ? 'fill-emerald-400 font-bold'
-                    : isHovered
-                    ? 'fill-white font-semibold'
-                    : 'fill-slate-400'
-                }`}
-              >
-                {MONTH_NAMES[idx]}
-              </text>
-
-              {/* Indicador de mês selecionado no eixo */}
-              {isSelected && (
-                <circle
-                  cx={incPt.x}
-                  cy={height - 2}
-                  r="2"
-                  fill="#10b981"
-                />
+              {isSelected ? (
+                <g>
+                  <rect
+                    x={incPt.x - 17}
+                    y={height - 24}
+                    width="34"
+                    height="18"
+                    fill={isProj ? "#f59e0b" : "#10b981"}
+                    rx="4"
+                  />
+                  <text
+                    x={incPt.x}
+                    y={height - 11}
+                    textAnchor="middle"
+                    className="text-[11px] font-bold fill-slate-950 font-sans"
+                  >
+                    {MONTH_NAMES[idx]}
+                  </text>
+                </g>
+              ) : (
+                <text
+                  x={incPt.x}
+                  y={height - 12}
+                  textAnchor="middle"
+                  className={`text-[11px] font-medium transition-colors ${
+                    isHovered
+                      ? 'fill-white font-semibold'
+                      : isDimmed
+                      ? 'fill-slate-600'
+                      : isProj
+                      ? 'fill-amber-400/80 font-normal'
+                      : 'fill-slate-400'
+                  }`}
+                >
+                  {MONTH_NAMES[idx]}
+                </text>
               )}
             </g>
           );

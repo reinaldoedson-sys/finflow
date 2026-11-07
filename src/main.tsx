@@ -60,7 +60,7 @@ class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
             </svg>
           </div>
           <h1 className="text-xl font-bold text-white mb-2">
-            FinFlow encontrou uma instabilidade
+            OndeFoi? encontrou uma instabilidade
           </h1>
           <p className="text-sm text-slate-400 max-w-sm mb-6">
             Pode ter ocorrido uma atualização de versão ou arquivo temporário em cache no celular.

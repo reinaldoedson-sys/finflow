@@ -116,7 +116,7 @@ export const PinLockModal: React.FC = () => {
         </div>
 
         <h2 className="text-xl font-bold tracking-tight text-white mb-1">
-          FinFlow Seguro
+          OndeFoi? Seguro
         </h2>
         <p className="text-xs text-slate-400 mb-8 flex items-center gap-1.5">
           <Lock className="w-3.5 h-3.5 text-slate-500" />

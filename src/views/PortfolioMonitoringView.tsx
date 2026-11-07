@@ -152,7 +152,7 @@ export const PortfolioMonitoringView: React.FC<PortfolioMonitoringViewProps> = (
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `finflow_carteira_investimentos_${activeCurrency}_${todayLocalISO()}.csv`);
+    link.setAttribute('download', `ondefoi_carteira_investimentos_${activeCurrency}_${todayLocalISO()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

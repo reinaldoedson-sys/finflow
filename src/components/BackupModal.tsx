@@ -39,7 +39,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
       const link = document.createElement('a');
       const dateStr = todayLocalISO();
       link.href = url;
-      link.download = `finflow-backup-${encryptExport ? 'encrypted-' : ''}${dateStr}.json`;
+      link.download = `ondefoi-backup-${encryptExport ? 'encrypted-' : ''}${dateStr}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

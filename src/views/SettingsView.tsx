@@ -147,7 +147,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
     setNewPin('');
     setConfirmPin('');
     setShowPinSetup(false);
-    setPinFeedback({ type: 'success', message: 'PIN configurado com sucesso! Seu FinFlow está protegido.' });
+    setPinFeedback({ type: 'success', message: 'PIN configurado com sucesso! Seu OndeFoi? está protegido.' });
   };
 
   const handleDisablePin = async () => {
@@ -449,7 +449,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           <div className="flex items-center gap-3">
             <img
               src="/pwa-192x192.png"
-              alt="FinFlow"
+              alt="OndeFoi?"
               className="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-700/50"
             />
             <div>
@@ -476,7 +476,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           <div className="flex items-start gap-2.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <div className="text-xs text-slate-300 leading-relaxed">
-              <strong className="text-white">Sincronização Automática em Tempo Real:</strong> Como o FinFlow está conectado ao Firebase Firestore, basta fazer login com a sua conta Google no celular e no computador. Qualquer gasto, cartão, aporte ou meta cadastrado no celular sincroniza instantaneamente na versão web e vice-versa.
+              <strong className="text-white">Sincronização Automática em Tempo Real:</strong> Como o OndeFoi? está conectado ao Firebase Firestore, basta fazer login com a sua conta Google no celular e no computador. Qualquer gasto, cartão, aporte ou meta cadastrado no celular sincroniza instantaneamente na versão web e vice-versa.
             </div>
           </div>
 
@@ -503,7 +503,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Abra o link do FinFlow no Google Chrome do seu celular, toque nos <strong>3 pontinhos do menu</strong> e selecione <strong>&quot;Instalar aplicativo&quot;</strong>. O Android gerará um APK nativo automaticamente no seu aparelho, com ícone próprio na tela de início e sem barra de navegador.
+                Abra o link do OndeFoi? no Google Chrome do seu celular, toque nos <strong>3 pontinhos do menu</strong> e selecione <strong>&quot;Instalar aplicativo&quot;</strong>. O Android gerará um APK nativo automaticamente no seu aparelho, com ícone próprio na tela de início e sem barra de navegador.
               </p>
             </div>
           </div>
@@ -558,8 +558,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
             <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] space-y-1">
               <strong className="block text-emerald-200">Como instalar no seu celular agora mesmo:</strong>
               <ol className="list-decimal list-inside space-y-1 text-slate-300">
-                <li>Abra o link do FinFlow no <strong>Google Chrome</strong> do seu smartphone.</li>
-                <li>Toque no banner verde <strong>&quot;Instalar FinFlow no Celular&quot;</strong> ou no menu do Chrome (três pontinhos) &gt; <strong>&quot;Instalar aplicativo&quot;</strong>.</li>
+                <li>Abra o link do OndeFoi? no <strong>Google Chrome</strong> do seu smartphone.</li>
+                <li>Toque no banner verde <strong>&quot;Instalar OndeFoi? no Celular&quot;</strong> ou no menu do Chrome (três pontinhos) &gt; <strong>&quot;Instalar aplicativo&quot;</strong>.</li>
                 <li>O Android gera um <strong>WebAPK assinado</strong> na sua gaveta de apps. Ele roda como aplicativo nativo (tela inteira, ícone próprio e sem barra de URL) e sincroniza tudo com seu computador!</li>
               </ol>
             </div>
@@ -776,14 +776,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenBackupModal })
           <div>
             <p className="text-xs font-semibold text-amber-400">Limpar Dados de Exemplo</p>
             <p className="text-[11px] text-slate-400">
-              Remove contas, cartões e transações de demonstração para que você comece com o FinFlow limpo. Os dados de teste não voltarão mais.
+              Remove contas, cartões e transações de demonstração para que você comece com o OndeFoi? limpo. Os dados de teste não voltarão mais.
             </p>
           </div>
           <button
             onClick={async () => {
               try {
                 await clearSampleData();
-                setSyncFeedback('Dados de exemplo removidos com sucesso! Você agora está com o FinFlow limpo.');
+                setSyncFeedback('Dados de exemplo removidos com sucesso! Você agora está com o OndeFoi? limpo.');
                 setTimeout(() => setSyncFeedback(null), 3500);
               } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : 'Falha ao remover dados de teste.';

@@ -89,7 +89,7 @@ export const PWAInstallBanner: React.FC = () => {
       <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-4 py-2.5 rounded-xl flex items-center justify-between text-xs mb-4 animate-in fade-in slide-in-from-top duration-300">
         <div className="flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>FinFlow instalado com sucesso! Seus dados continuarão sincronizados em tempo real.</span>
+          <span>OndeFoi? instalado com sucesso! Seus dados continuarão sincronizados em tempo real.</span>
         </div>
       </div>
     );
@@ -101,12 +101,12 @@ export const PWAInstallBanner: React.FC = () => {
         <div className="flex items-center gap-3">
           <img
             src="/pwa-192x192.png"
-            alt="FinFlow"
+            alt="OndeFoi?"
             className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-md shadow-emerald-500/20 border border-slate-700/50"
           />
           <div>
             <div className="flex items-center gap-1.5 font-bold text-white text-sm">
-              <span>Instalar FinFlow no Celular</span>
+              <span>Instalar OndeFoi? no Celular</span>
               <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
                 <Sparkles className="w-2.5 h-2.5" /> App / APK
               </span>
@@ -149,7 +149,7 @@ export const PWAInstallBanner: React.FC = () => {
           <ol className="list-decimal list-inside space-y-1 text-slate-400">
             <li>No Chrome do celular, toque no menu de <strong>3 pontinhos (⋮)</strong> no canto superior direito.</li>
             <li>Selecione <strong>&quot;Adicionar à tela inicial&quot;</strong> (ou &quot;Instalar aplicativo&quot;).</li>
-            <li>O atalho oficial com o ícone do FinFlow será criado. Ao tocar nele, ele abre em <strong>tela cheia (sem barra de URL)</strong> como um app nativo, com sincronização em tempo real!</li>
+            <li>O atalho oficial com o ícone do OndeFoi? será criado. Ao tocar nele, ele abre em <strong>tela cheia (sem barra de URL)</strong> como um app nativo, com sincronização em tempo real!</li>
           </ol>
         </div>
       )}

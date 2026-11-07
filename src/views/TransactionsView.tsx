@@ -158,7 +158,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `finflow-transacoes-${todayLocalISO()}.csv`;
+    link.download = `ondefoi-transacoes-${todayLocalISO()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
