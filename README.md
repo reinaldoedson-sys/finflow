@@ -148,6 +148,16 @@ O OndeFoi? integra-se ao menu "Compartilhar" nativo do sistema operacional (Andr
   - **Despesas / Contas Pendentes:** parcelas e contas que vencem hoje, nos próximos 3 dias ou com pagamento atrasado.
 - Exibe o total acumulado pendente, contagem de itens em atenção e atalhos diretos ("Ver cartão" e "Marcar paga").
 
+### 5. Cartões de Crédito, Limite Dinâmico & Visualizador de Faturas
+- **Limite Dinâmico:** Monitoramento preciso do comprometimento total do cartão:
+  - Barra de progresso multi-segmento que diferencia **compras da fatura atual em aberto** (rosa/vermelho) de **parcelas futuras já comprometidas** (âmbar/laranja), calculando o **limite disponível livre** em centavos sem perda de precisão;
+  - Exibido nos cartões da aba **Contas & Cartões** e nos mini-cards do **Início**.
+- **Visualizador de Faturas:**
+  - Histórico completo categorizado por abas: **Faturas Anteriores Fechadas**, **Fatura Atual Aberta** e **Faturas Futuras Previstas**;
+  - Status em tempo real: *Paga*, *Aberta*, *Fechada (Aguardando Pagamento)*, *Vencida* e *Prevista*;
+  - Detalhamento de datas de fechamento e vencimento de cada ciclo, valor à vista vs. parcelas do mês e lista item a item de compras;
+  - **Botão "Marcar fatura como paga":** Permite quitar a fatura selecionada de uma só vez, escolhendo a conta bancária de débito (com exibição do saldo disponível) e o método (PIX, Boleto, Débito). A ação debita a conta corrente, marca os lançamentos como pagos, atualiza o status para *Paga* e libera o limite dinâmico imediatamente com feedback tátil.
+
 ### Comportamento e Segurança de Inicialização:
 - **Parâmetro `acao`:** Valores suportados: `nova-despesa`, `nova-receita` e `compartilhar`. Parâmetros desconhecidos, vazios ou inválidos são ignorados de forma segura.
 - **Limpeza de URL:** A barra de endereços é imediatamente higienizada via `history.replaceState` preservando `history.state` e o hash de abas, garantindo que um reload (F5) não reabra o modal com dados repetidos.

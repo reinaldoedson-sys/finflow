@@ -23,6 +23,7 @@ import { CategoryIcon } from '../components/CategoryIcon';
 import { DueAlertsBanner } from '../components/DueAlertsBanner';
 import { Transaction } from '../types/finance';
 import { countMonthTransactions } from '../domain/transactions';
+import { calculateDynamicLimit } from '../domain/creditCardInvoices';
 
 interface DashboardViewProps {
   onOpenNewTransaction: () => void;
@@ -344,16 +345,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           {/* Credit Cards */}
           {creditCards.map(card => {
-            const usagePercent = calculatePercentage(card.currentInvoice, card.limit);
+            const dynamicLimit = calculateDynamicLimit(card, transactions);
             return (
               <div
                 key={card.id}
-                className="min-w-[210px] sm:min-w-0 snap-start p-3.5 rounded-xl bg-slate-900/50 border border-slate-800/80 hover:border-slate-700/80 transition-all relative overflow-hidden"
+                onClick={() => onNavigateToTab('accounts')}
+                className="min-w-[210px] sm:min-w-0 snap-start p-3.5 rounded-xl bg-slate-900/50 border border-slate-800/80 hover:border-purple-500/40 transition-all relative overflow-hidden cursor-pointer group"
+                title="Ver faturas e limites em Contas & Cartões"
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <CardIcon className="w-3.5 h-3.5 text-purple-400" />
-                    <span className="text-xs font-semibold text-slate-200 truncate max-w-[120px]">
+                    <span className="text-xs font-semibold text-slate-200 truncate max-w-[120px] group-hover:text-purple-300 transition-colors">
                       {card.name}
                     </span>
                   </div>
@@ -362,20 +365,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </span>
                 </div>
                 <div className="text-lg font-bold font-mono text-rose-400">
-                  {formatCurrency(card.currentInvoice, currency, hideValues)}
+                  {formatCurrency(dynamicLimit.pendingOneOffAmount, currency, hideValues)}
                 </div>
                 <div className="mt-2">
                   <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
-                    <span>Limite: {formatCurrency(card.limit, currency, hideValues)}</span>
-                    <span className="font-mono">{usagePercent}%</span>
+                    <span>Comprometido: {dynamicLimit.consumedPercent}%</span>
+                    <span className="font-mono text-slate-300">{formatCurrency(dynamicLimit.totalConsumedAmount, currency, hideValues)}</span>
                   </div>
-                  <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        usagePercent > 80 ? 'bg-rose-500' : 'bg-purple-500'
-                      }`}
-                      style={{ width: `${usagePercent}%` }}
-                    />
+                  <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden flex">
+                    {dynamicLimit.oneOffPercent > 0 && (
+                      <div
+                        className="h-full bg-rose-500 transition-all duration-500"
+                        style={{ width: `${dynamicLimit.oneOffPercent}%` }}
+                      />
+                    )}
+                    {dynamicLimit.installmentsPercent > 0 && (
+                      <div
+                        className="h-full bg-amber-500 transition-all duration-500"
+                        style={{ width: `${dynamicLimit.installmentsPercent}%` }}
+                      />
+                    )}
                   </div>
                 </div>
               </div>

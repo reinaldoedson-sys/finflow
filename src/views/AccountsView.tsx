@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { useSecurity } from '../context/SecurityContext';
 import { Account, CreditCard } from '../types/finance';
-import { formatCurrency, calculatePercentage } from '../utils/currency';
+import { formatCurrency } from '../utils/currency';
+import { calculateDynamicLimit } from '../domain/creditCardInvoices';
+import { CreditCardInvoicesModal } from '../components/CreditCardInvoicesModal';
 import { 
   Building2, 
   CreditCard as CardIcon, 
@@ -11,7 +13,8 @@ import {
   Trash2, 
   Wallet, 
   LineChart, 
-  Coins
+  Coins,
+  Receipt
 } from 'lucide-react';
 
 interface AccountsViewProps {
@@ -30,12 +33,17 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   const { 
     accounts, 
     creditCards, 
+    transactions,
+    categories,
+    addTransaction,
+    updateTransaction,
     currency, 
     deleteAccount, 
     deleteCreditCard, 
     summary 
   } = useFinance();
   const { hideValues } = useSecurity();
+  const [selectedInvoiceCard, setSelectedInvoiceCard] = useState<CreditCard | null>(null);
 
   // Split account types
   const checkingTotal = accounts
@@ -183,8 +191,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {creditCards.map(card => {
-            const usagePercent = calculatePercentage(card.currentInvoice, card.limit);
-            const availableLimit = Math.max(0, card.limit - card.currentInvoice);
+            const dynamicLimit = calculateDynamicLimit(card, transactions);
 
             return (
               <div
@@ -209,12 +216,14 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                     <button
                       onClick={() => onEditCreditCard(card)}
                       className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-800"
+                      title="Editar cartão"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => deleteCreditCard(card.id)}
                       className="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                      title="Excluir cartão"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -227,31 +236,59 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                       Fatura Atual
                     </span>
                     <span className="text-base font-bold font-mono text-rose-400">
-                      {formatCurrency(card.currentInvoice, currency, hideValues)}
+                      {formatCurrency(dynamicLimit.pendingOneOffAmount, currency, hideValues)}
                     </span>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-800/40">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
                       Limite Disponível
                     </span>
-                    <span className="text-base font-bold font-mono text-slate-200">
-                      {formatCurrency(availableLimit, currency, hideValues)}
+                    <span className="text-base font-bold font-mono text-emerald-400">
+                      {formatCurrency(dynamicLimit.availableLimitAmount, currency, hideValues)}
                     </span>
                   </div>
                 </div>
 
-                <div className="space-y-1.5 mb-3">
+                {/* Limite Dinâmico Visual Bar */}
+                <div className="space-y-1.5 mb-3.5">
                   <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Uso do limite</span>
-                    <span className="font-mono text-slate-200">{usagePercent}% de {formatCurrency(card.limit, currency, hideValues)}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-medium text-slate-300">Limite Comprometido</span>
+                      <span className="text-[10px] text-purple-400 font-mono">({dynamicLimit.consumedPercent}%)</span>
+                    </span>
+                    <span className="font-mono text-slate-200">
+                      {formatCurrency(dynamicLimit.totalConsumedAmount, currency, hideValues)} de {formatCurrency(card.limit, currency, hideValues)}
+                    </span>
                   </div>
-                  <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        usagePercent > 80 ? 'bg-rose-500' : 'bg-purple-500'
-                      }`}
-                      style={{ width: `${usagePercent}%` }}
-                    />
+
+                  {/* Multi-segment bar: Compras pendentes / fatura atual (rose) + parcelas futuras (amber) */}
+                  <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden flex p-0.5">
+                    {dynamicLimit.oneOffPercent > 0 && (
+                      <div
+                        className="h-full bg-rose-500 rounded-l-full transition-all duration-500"
+                        style={{ width: `${dynamicLimit.oneOffPercent}%` }}
+                        title={`Compras Fatura Atual: ${formatCurrency(dynamicLimit.pendingOneOffAmount, currency, hideValues)}`}
+                      />
+                    )}
+                    {dynamicLimit.installmentsPercent > 0 && (
+                      <div
+                        className="h-full bg-amber-500 transition-all duration-500"
+                        style={{ width: `${dynamicLimit.installmentsPercent}%` }}
+                        title={`Parcelas Futuras Comprometidas: ${formatCurrency(dynamicLimit.committedInstallmentsAmount, currency, hideValues)}`}
+                      />
+                    )}
+                  </div>
+
+                  {/* Sub-legenda com detalhes */}
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                      <span>Fatura atual: <strong className="font-mono text-rose-300">{formatCurrency(dynamicLimit.pendingOneOffAmount, currency, hideValues)}</strong></span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                      <span>Parcelas futuras: <strong className="font-mono text-amber-300">{formatCurrency(dynamicLimit.committedInstallmentsAmount, currency, hideValues)}</strong></span>
+                    </span>
                   </div>
                 </div>
 
@@ -260,11 +297,36 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                   <span aria-hidden="true">·</span>
                   <span className="text-purple-400">Vencimento dia {card.dueDay}</span>
                 </div>
+
+                {/* Botão Ver Faturas & Pagar */}
+                <button
+                  onClick={() => setSelectedInvoiceCard(card)}
+                  className="w-full mt-3 py-2 px-3 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-xs font-semibold text-slate-200 hover:text-white transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Receipt className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Ver Faturas & Pagar</span>
+                </button>
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Credit Card Invoices & Dynamic Limit Modal */}
+      {selectedInvoiceCard && (
+        <CreditCardInvoicesModal
+          isOpen={!!selectedInvoiceCard}
+          onClose={() => setSelectedInvoiceCard(null)}
+          card={selectedInvoiceCard}
+          accounts={accounts}
+          categories={categories}
+          transactions={transactions}
+          currency={currency}
+          hideValues={hideValues}
+          onAddTransaction={addTransaction}
+          onUpdateTransaction={updateTransaction}
+        />
+      )}
     </div>
   );
 };
